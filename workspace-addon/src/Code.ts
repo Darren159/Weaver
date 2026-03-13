@@ -104,7 +104,7 @@ function insertAtCursor(text: string): void {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getBackendUrl(): string {
   return PropertiesService.getUserProperties()
-    .getProperty('backendUrl') ?? 'http://localhost:3000';
+    .getProperty('backendUrl') ?? 'http://localhost:8000';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -86,7 +86,7 @@ clasp compiles the TypeScript and uploads all files in `src/` to Apps Script.
 1. Open any Google Doc
 2. Click **Extensions** → **PKM Linker** → **Open sidebar**
    - If you don't see the menu, reload the page — the `onOpen` trigger adds it on document load
-3. In the sidebar settings, set your **Backend URL** (default: `http://localhost:3000`)
+3. In the sidebar settings, set your **Backend URL** (default: `http://localhost:8000`)
 4. Click **Index this folder** to index the Drive docs you want as context
 
 ---

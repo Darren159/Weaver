@@ -225,7 +225,7 @@
     <summary>Settings</summary>
     <div class="settings-body">
       <label for="backend-url-input">Backend URL</label>
-      <input type="text" id="backend-url-input" placeholder="http://localhost:3000">
+      <input type="text" id="backend-url-input" placeholder="http://localhost:8000">
       <button class="btn-secondary" onclick="saveBackendUrl()" style="margin-top:8px">Save</button>
 
       <hr>
@@ -239,7 +239,7 @@
   <script>
     // ── State ──────────────────────────────────────────────────────────────────
 
-    var backendUrl    = 'http://localhost:3000';
+    var backendUrl    = 'http://localhost:8000';
     var suggestion    = '';
     var abortCtrl     = null;
     var searchTimeout = null;
