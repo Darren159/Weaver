@@ -176,24 +176,33 @@ async def complete(request: Request):
                 "Complete the code at the cursor position:"
             )
 
+        system_content = (
+            "You are a code completion assistant. Given the user's code context "
+            "and relevant API documentation, provide ONLY the code that should "
+            "come next. Do not include explanations, markdown, or code fences. "
+            "Just output the raw code completion (1-5 lines max)."
+        )
+        if language == "google-docs":
+            system_content = (
+                "You are an intelligent writing assistant inside Google Docs. "
+                "Complete the document context provided by the user. "
+                "You may format your response using standard Markdown tables, "
+                "and for flowcharts, graphs, or charts use ```mermaid fenced code blocks."
+            )
+
         llm_messages = [
             {
                 "role": "system",
-                "content": (
-                    "You are a code completion assistant. Given the user's code context "
-                    "and relevant API documentation, provide ONLY the code that should "
-                    "come next. Do not include explanations, markdown, or code fences. "
-                    "Just output the raw code completion (1-5 lines max)."
-                ),
+                "content": system_content,
             },
             {
                 "role": "user",
                 "content": (
                     f"Language: {language}\n\n"
-                    f"Relevant API documentation:\n{api_context}\n\n"
-                    f"Code before cursor:\n{prefix[-800:]}\n\n"
-                    f"Code after cursor:\n{suffix[:200]}\n\n"
-                    "Complete the code at the cursor position:"
+                    f"Relevant Context/API documentation:\n{api_context}\n\n"
+                    f"Text before cursor:\n{prefix[-800:]}\n\n"
+                    f"Text after cursor:\n{suffix[:200]}\n\n"
+                    "Provide the completion at the cursor position:"
                 ),
             },
         ]
@@ -302,7 +311,10 @@ async def chat(request: Request):
         "Answer the user's question clearly and concisely. "
         "When you suggest code modifications, always wrap them in a fenced code block "
         "with the language identifier. For example:\n```python\n...\n```\n"
-        "The user can click 'Apply' on any code block to apply it directly to their file.",
+        "The user can click 'Apply' on any code block to apply it directly to their file. "
+        "You have the capability to generate rich content. If presenting tabular data, use standard "
+        "Markdown tables. If drawing a chart, graph, or flowchart, use Mermaid.js syntax inside a "
+        "```mermaid fencing block.",
     ]
     if file_name:
         system_parts.append(f"The user is currently editing: {file_name}")
