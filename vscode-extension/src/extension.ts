@@ -45,7 +45,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const backendUrl = vscode.workspace
         .getConfiguration('pkmLinker')
-        .get<string>('backendUrl', 'http://localhost:3000');
+        .get<string>('backendUrl', 'http://localhost:8000');
 
       docsView.showLoading(ctx.query);
 

@@ -128,7 +128,7 @@ export class ChatPanel {
 
     const backendUrl = vscode.workspace
       .getConfiguration('pkmLinker')
-      .get<string>('backendUrl', 'http://localhost:3000');
+      .get<string>('backendUrl', 'http://localhost:8000');
 
     // _lastEditor is maintained by onDidChangeActiveTextEditor in the constructor
     const fileContext  = this._lastEditor?.document.getText() ?? '';

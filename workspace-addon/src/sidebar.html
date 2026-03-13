@@ -372,6 +372,7 @@
           suffix:   ctx.suffix,
           language: 'google-docs',
           query:    ctx.prefix.slice(-150).trim(),
+          index:    'drive-docs',
         }),
         signal: abortCtrl.signal,
       })
@@ -485,7 +486,7 @@
       fetch(backendUrl + '/api/search', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ query: query, size: 5 }),
+        body:    JSON.stringify({ query: query, size: 5, index: 'drive-docs' }),
       })
       .then(function(r) { return r.json(); })
       .then(function(data) { renderResults(data.results || []); })

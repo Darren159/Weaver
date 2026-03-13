@@ -5,7 +5,9 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.requests import Request
 
 from backend.config import settings
-from backend.elastic import get_client, ALL_INDICES
+from backend.elastic import get_client, ALL_INDICES, DRIVE_INDEX, GITHUB_INDEX
+
+_ALLOWED_INDICES = {DRIVE_INDEX, GITHUB_INDEX, ALL_INDICES}
 
 router = APIRouter(prefix="/api", tags=["search"])
 
@@ -19,13 +21,17 @@ async def search(request: Request):
     body = await request.json()
     query = body.get("query", "").strip()
     size = body.get("size", 5)
+    index = body.get("index", ALL_INDICES)
+
+    if index not in _ALLOWED_INDICES:
+        return JSONResponse({"error": f"invalid index '{index}'"}, status_code=400)
 
     if not query:
         return JSONResponse({"error": "query is required"}, status_code=400)
 
     try:
         result = get_client().search(
-            index=ALL_INDICES,
+            index=index,
             retriever={
                 "rrf": {
                     "retrievers": [
@@ -76,13 +82,17 @@ async def complete(request: Request):
     suffix = body.get("suffix", "")
     language = body.get("language", "")
     query = body.get("query", "").strip()
+    index = body.get("index", ALL_INDICES)
+
+    if index not in _ALLOWED_INDICES:
+        return JSONResponse({"error": f"invalid index '{index}'"}, status_code=400)
 
     if not prefix or not query:
         return {"completion": ""}
 
     try:
         search_result = get_client().search(
-            index=ALL_INDICES,
+            index=index,
             retriever={
                 "rrf": {
                     "retrievers": [
@@ -102,18 +112,11 @@ async def complete(request: Request):
             size=3,
         )
 
-        api_parts = []
-        for hit in search_result["hits"]["hits"]:
-            s = hit["_source"]
-            parts = [f"{s.get('method', '')} {s.get('endpoint', '')}"]
-            if s.get("title"):
-                parts.append(f"// {s['title']}")
-            if s.get("parameters"):
-                parts.append(f"Parameters:\n{s['parameters']}")
-            if s.get("request_body"):
-                parts.append(f"Example:\n{str(s['request_body'])[:300]}")
-            api_parts.append("\n".join(parts))
-        api_context = "\n---\n".join(api_parts)
+        rag_context = "\n---\n".join(
+            f"[{s.get('title', '')}]\n{s.get('content', '')[:400]}"
+            for hit in search_result["hits"]["hits"]
+            for s in [hit["_source"]]
+        )
 
         url = f"{settings.es_node.rstrip('/')}/_inference/chat_completion/{LLM_INFERENCE_ID}/_stream"
         llm_body = {
@@ -122,7 +125,7 @@ async def complete(request: Request):
                     "role": "system",
                     "content": (
                         "You are a code completion assistant. Given the user's code context "
-                        "and relevant API documentation, provide ONLY the code that should "
+                        "and relevant knowledge-base excerpts, provide ONLY the code that should "
                         "come next. Do not include explanations, markdown, or code fences. "
                         "Just output the raw code completion (1-5 lines max)."
                     ),
@@ -131,7 +134,7 @@ async def complete(request: Request):
                     "role": "user",
                     "content": (
                         f"Language: {language}\n\n"
-                        f"Relevant API documentation:\n{api_context}\n\n"
+                        f"Relevant context:\n{rag_context}\n\n"
                         f"Code before cursor:\n{prefix[-800:]}\n\n"
                         f"Code after cursor:\n{suffix[:200]}\n\n"
                         "Complete the code at the cursor position:"
@@ -223,9 +226,7 @@ async def chat(request: Request):
             for hit in search_result["hits"]["hits"]:
                 s = hit["_source"]
                 snippet = s.get("content", "")[:400]
-                parts.append(
-                    f"[{s.get('title', '')}]\n{s.get('method', '')} {s.get('endpoint', '')}\n{snippet}"
-                )
+                parts.append(f"[{s.get('title', '')}]\n{snippet}")
             rag_context = "\n---\n".join(parts)
         except Exception as e:
             print(f"[chat] RAG search error: {e}")

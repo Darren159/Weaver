@@ -55,7 +55,7 @@
       "properties": {
         "pkmLinker.backendUrl": {
           "type": "string",
-          "default": "http://localhost:3000",
+          "default": "http://localhost:8000",
           "description": "URL of the PKM Linker backend API"
         },
         "pkmLinker.debounceMs": {

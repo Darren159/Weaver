@@ -82,7 +82,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
 
     const backendUrl = vscode.workspace
       .getConfiguration('pkmLinker')
-      .get<string>('backendUrl', 'http://localhost:3000');
+      .get<string>('backendUrl', 'http://localhost:8000');
 
     // Mark the stream as started BEFORE the async callbacks fire.
     this.inflightDocGen   = docGen;
