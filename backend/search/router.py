@@ -13,6 +13,17 @@ router = APIRouter(prefix="/api", tags=["search"])
 
 LLM_INFERENCE_ID = ".anthropic-claude-3.7-sonnet-chat_completion"
 
+VALID_INDICES = {DRIVE_INDEX, GITHUB_INDEX}
+
+
+def _resolve_index(body: dict) -> str:
+    requested_index = str(body.get("index", "")).strip()
+    if not requested_index:
+        return ALL_INDICES
+    if requested_index not in VALID_INDICES:
+        raise ValueError(f"Unsupported index '{requested_index}'")
+    return requested_index
+
 
 # ── Search ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +39,11 @@ async def search(request: Request):
 
     if not query:
         return JSONResponse({"error": "query is required"}, status_code=400)
+
+    try:
+        index = _resolve_index(body)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
     try:
         result = get_client().search(
@@ -91,6 +107,11 @@ async def complete(request: Request):
         return {"completion": ""}
 
     try:
+        index = _resolve_index(body)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    try:
         search_result = get_client().search(
             index=index,
             retriever={
@@ -118,28 +139,43 @@ async def complete(request: Request):
             for s in [hit["_source"]]
         )
 
+        is_doc = language.lower() == "google-docs"
+
+        if is_doc:
+            system_prompt = (
+                "You are a professional business writing assistant. "
+                "The user is composing a document and you must complete their text naturally. "
+                "Use specific details — names, roles, emails, funding amounts, technical interests — "
+                "from the provided context to write precise, substantive prose. "
+                "Continue directly from where the text cuts off. Do not repeat the preceding text. "
+                "Write 2-4 sentences. No markdown, no preamble, no explanation."
+            )
+            user_content = (
+                f"Relevant partner/knowledge-base context:\n{rag_context}\n\n"
+                f"Document text before cursor:\n{prefix[-1200:]}\n\n"
+                f"Document text after cursor:\n{suffix[:300]}\n\n"
+                "Continue the text at the cursor position:"
+            )
+        else:
+            system_prompt = (
+                "You are a code completion assistant. Given the user's code context "
+                "and relevant knowledge-base excerpts, provide ONLY the code that should "
+                "come next. Do not include explanations, markdown, or code fences. "
+                "Just output the raw code completion (1-5 lines max)."
+            )
+            user_content = (
+                f"Language: {language}\n\n"
+                f"Relevant context:\n{rag_context}\n\n"
+                f"Code before cursor:\n{prefix[-800:]}\n\n"
+                f"Code after cursor:\n{suffix[:200]}\n\n"
+                "Complete the code at the cursor position:"
+            )
+
         url = f"{settings.es_node.rstrip('/')}/_inference/chat_completion/{LLM_INFERENCE_ID}/_stream"
         llm_body = {
             "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a code completion assistant. Given the user's code context "
-                        "and relevant knowledge-base excerpts, provide ONLY the code that should "
-                        "come next. Do not include explanations, markdown, or code fences. "
-                        "Just output the raw code completion (1-5 lines max)."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Language: {language}\n\n"
-                        f"Relevant context:\n{rag_context}\n\n"
-                        f"Code before cursor:\n{prefix[-800:]}\n\n"
-                        f"Code after cursor:\n{suffix[:200]}\n\n"
-                        "Complete the code at the cursor position:"
-                    ),
-                },
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_content},
             ],
         }
 
@@ -194,6 +230,11 @@ async def chat(request: Request):
     if not messages:
         return JSONResponse({"error": "messages is required"}, status_code=400)
 
+    try:
+        index = _resolve_index(body)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
     last_user = next(
         (m["content"] for m in reversed(messages) if m.get("role") == "user"), ""
     )
@@ -203,7 +244,7 @@ async def chat(request: Request):
     if query:
         try:
             search_result = get_client().search(
-                index=ALL_INDICES,
+                index=index,
                 retriever={
                     "rrf": {
                         "retrievers": [
