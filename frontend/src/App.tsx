@@ -12,6 +12,8 @@ import {
   ingestDrive,
   ingestGithub,
   uploadFile,
+  getActiveModel,
+  setActiveModel,
   listAgents,
 } from "./services/api";
 
@@ -163,6 +165,34 @@ function App() {
     const value = Number(maxFiles);
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
   }, [maxFiles]);
+
+  // Model state
+  const [activeModel, setActiveModelId] = useState<string>("us.anthropic.claude-3-5-sonnet-20241022-v2:0");
+  const [isUpdatingModel, setIsUpdatingModel] = useState(false);
+
+  const AVAILABLE_MODELS = [
+    { id: "us.anthropic.claude-3-5-sonnet-20241022-v2:0", name: "Claude 3.5 Sonnet" },
+    { id: "us.anthropic.claude-3-7-sonnet-20250219-v1:0", name: "Claude 3.7 Sonnet" },
+    { id: "amazon.nova-pro-v1:0", name: "Amazon Nova Pro" },
+    { id: "us.anthropic.claude-3-haiku-20240307-v1:0", name: "Claude 3 Haiku" },
+  ];
+
+  useEffect(() => {
+    getActiveModel().then(setActiveModelId).catch(console.error);
+  }, []);
+
+  const handleModelChange = async (modelId: string) => {
+    setIsUpdatingModel(true);
+    try {
+      const newModel = await setActiveModel(modelId);
+      setActiveModelId(newModel);
+      setStatus(`Active model set to ${newModel}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update model.");
+    } finally {
+      setIsUpdatingModel(false);
+    }
+  };
 
   // Verify stored user_id on mount and when it changes
   useEffect(() => {
@@ -349,8 +379,24 @@ function App() {
 
   return (
     <div className="page">
-      <header className="topbar">
+      <header className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Elastic Document Console</h1>
+        <div className="model-selector" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label htmlFor="model-select" style={{ fontSize: '13px', color: 'var(--text-muted, #666)' }}>Model:</label>
+          <select
+            id="model-select"
+            value={activeModel}
+            onChange={(e) => handleModelChange(e.target.value)}
+            disabled={isUpdatingModel}
+            style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border, #ccc)' }}
+          >
+            {AVAILABLE_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <nav className="page-tabs" aria-label="Page navigation">
           <button
             type="button"
