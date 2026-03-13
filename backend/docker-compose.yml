@@ -1,0 +1,24 @@
+name: ${COMPOSE_PROJECT_NAME:-elastic}
+
+services:
+  app:
+    build: .
+    container_name: ${COMPOSE_PROJECT_NAME:-elastic}-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app/backend
+      - ./data:/app/data
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./poetry.lock:/app/poetry.lock
+    environment:
+      - ES_NODE=${ES_NODE}
+      - ES_API_KEY=${ES_API_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI:-http://localhost:8000/auth/google/callback}
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+    env_file:
+      - .env
+    restart: unless-stopped
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload

@@ -1,0 +1,10 @@
+ES_NODE=https://your-deployment.es.region.aws.elastic.cloud:443
+ES_API_KEY=your-elastic-api-key
+
+# Google OAuth 2.0 (create at console.cloud.google.com → APIs & Services → Credentials)
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+OAUTH_REDIRECT_URI=http://localhost:8000/auth/google/callback
+
+# JWT signing key – change to a long random string in production
+SECRET_KEY=change-me-in-production
