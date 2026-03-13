@@ -46,6 +46,10 @@ export class ChatPanel {
   private _messages: ChatMessage[] = [];
   private _inflight = false;
   private _lastEditor: vscode.TextEditor | undefined;
+
+  public get activeEditor(): vscode.TextEditor | undefined {
+    return this._lastEditor;
+  }
   private _pendingDiff: PendingDiff | undefined;
   private _diffLens = new DiffCodeLensProvider();
   // Single persistent decoration type — cleared by setting empty ranges, never disposed
@@ -109,7 +113,7 @@ export class ChatPanel {
         await this._handleUserMessage(msg.text);
       }
       if (msg.type === 'apply') {
-        await this._applyCode(msg.code, msg.language);
+        await this.applyCode(msg.code, msg.language);
       }
       if (msg.type === 'clear') {
         this._messages = [];
@@ -282,10 +286,10 @@ export class ChatPanel {
     // Fall back to the largest block if nothing matched by language
     const best = matching[0] ?? blocks.reduce((a, b) => b.code.length > a.code.length ? b : a);
 
-    await this._applyCode(best.code, best.lang);
+    await this.applyCode(best.code, best.lang);
   }
 
-  private async _applyCode(code: string, language: string): Promise<void> {
+  public async applyCode(code: string, language: string): Promise<void> {
     const editor = this._lastEditor ?? vscode.window.activeTextEditor;
     if (!editor) {
       vscode.window.showWarningMessage('Weaver: No active editor to apply changes to.');
@@ -323,7 +327,7 @@ export class ChatPanel {
       }
     }
 
-    // Append at end of file — never blindly replace the whole file.
+    // Insert at cursor position (or replace selection if one exists).
     // Strip leading lines that already exist verbatim in the file (e.g. duplicate imports).
     const existingLines = new Set(original.split('\n').map(l => l.trim()).filter(l => l));
     const codeLines = code.split('\n');
@@ -335,11 +339,13 @@ export class ChatPanel {
     const dedupedCode = codeLines.slice(stripUntil).join('\n').trimStart();
     if (!dedupedCode.trim()) { return; } // nothing new to add
 
-    const sep = original.trimEnd().endsWith('\n') ? '\n' : '\n\n';
-    const appended = original.trimEnd() + sep + dedupedCode.trimEnd() + '\n';
-    firstLine = original.split('\n').length;
-    lastLine  = firstLine + dedupedCode.split('\n').length + 1;
-    edit.replace(doc.uri, new vscode.Range(0, 0, doc.lineCount, 0), appended);
+    const cursor   = editor.selection;
+    const insertAt = cursor.isEmpty
+      ? new vscode.Range(cursor.active, cursor.active)
+      : cursor;
+    firstLine = insertAt.start.line;
+    lastLine  = firstLine + dedupedCode.split('\n').length;
+    edit.replace(doc.uri, insertAt, dedupedCode.trimEnd() + '\n');
     await vscode.workspace.applyEdit(edit);
     this._showDiff(editor, original, firstLine, lastLine);
   }
