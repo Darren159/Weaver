@@ -82,6 +82,9 @@ dmypy.json
 logs/
 *.log
 
+# Node.js dependencies
+node_modules/
+
 # VS Code Extension
 extension/node_modules/
 extension/out/

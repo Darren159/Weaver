@@ -8,8 +8,9 @@ import io
 import re
 import logging
 import httpx
+import docx as python_docx
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from googleapiclient.http import MediaIoBaseDownload
@@ -57,6 +58,66 @@ def _export_gdoc_as_text(creds, file_id: str) -> bytes:
     while not done:
         _, done = downloader.next_chunk()
     return buffer.getvalue()
+
+
+# ── File upload ingest ────────────────────────────────────────────────────────
+
+_DOCX_MIMES = {
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+}
+
+
+def _extract_docx_text(data: bytes) -> str:
+    doc = python_docx.Document(io.BytesIO(data))
+    return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
+
+class UploadResponse(BaseModel):
+    file_name: str
+    size_bytes: int
+    chunks_created: int
+    chunks_indexed: int
+    errors: list[str]
+
+
+@router.post("/upload", response_model=UploadResponse)
+async def ingest_upload(
+    file: UploadFile = File(...),
+    user_id: str = Query(""),
+):
+    """
+    Upload a PDF or Word document directly, chunk it, and index into drive-docs.
+    """
+    data = await file.read()
+    file_name = file.filename or "upload"
+    source = f"upload/{user_id.strip() or 'anonymous'}"
+    fname_lower = file_name.lower()
+    content_type = file.content_type or ""
+
+    if fname_lower.endswith(".pdf") or "pdf" in content_type:
+        chunks = chunk_pdf_bytes(data, file_name, source, "upload-pdf")
+    elif fname_lower.endswith((".docx", ".doc")) or content_type in _DOCX_MIMES:
+        try:
+            text = _extract_docx_text(data)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Failed to parse document: {exc}")
+        chunks = chunk_text(text, file_name, source, "upload-doc")
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Upload a PDF or Word document (.pdf, .docx, .doc).",
+        )
+
+    indexed, all_errors = _bulk_index(chunks, DRIVE_INDEX)
+
+    return UploadResponse(
+        file_name=file_name,
+        size_bytes=len(data),
+        chunks_created=len(chunks),
+        chunks_indexed=indexed,
+        errors=all_errors,
+    )
 
 
 # ── Drive ingest ──────────────────────────────────────────────────────────────

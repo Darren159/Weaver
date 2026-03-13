@@ -86,7 +86,7 @@ def _build_doc(
 
 # ── PDF chunker ───────────────────────────────────────────────────────────────
 
-def chunk_pdf_bytes(data: bytes, file_name: str, source: str) -> list[dict]:
+def chunk_pdf_bytes(data: bytes, file_name: str, source: str, doc_type: str = "drive-pdf") -> list[dict]:
     """Extract text from PDF bytes and return chunks ready for indexing."""
     try:
         reader = PdfReader(io.BytesIO(data))
@@ -114,7 +114,7 @@ def chunk_pdf_bytes(data: bytes, file_name: str, source: str) -> list[dict]:
             chunk_index=i,
             file_name=file_name,
             source=source,
-            doc_type="drive-pdf",
+            doc_type=doc_type,
         )
         for i, chunk in enumerate(raw_chunks)
     ]

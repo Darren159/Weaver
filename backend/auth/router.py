@@ -12,7 +12,7 @@ import uuid
 from threading import Lock
 
 from fastapi import APIRouter, HTTPException, Query, Body
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel
 
 from backend.config import settings
@@ -74,6 +74,41 @@ def google_login():
         _save_states(data)
 
     return RedirectResponse(auth_url)
+
+
+class GoogleInitResponse(BaseModel):
+    auth_url: str
+    user_id: str
+
+
+@router.get("/google/init", response_model=GoogleInitResponse)
+def google_init():
+    """
+    Return the Google OAuth URL and a pre-assigned user_id without redirecting.
+    The frontend opens the auth_url in a popup, then polls /auth/google/status.
+    """
+    flow = google_oauth.build_flow(
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
+        redirect_uri=settings.oauth_redirect_uri,
+    )
+    code_verifier, code_challenge = google_oauth.generate_pkce_pair()
+    auth_url, state = google_oauth.get_authorization_url(flow, code_challenge)
+
+    user_id = str(uuid.uuid4())
+    with _states_lock:
+        data = _load_states()
+        data[state] = {"user_id": user_id, "code_verifier": code_verifier}
+        _save_states(data)
+
+    return GoogleInitResponse(auth_url=auth_url, user_id=user_id)
+
+
+@router.get("/google/status")
+def google_status(user_id: str = Query(...)):
+    """Return whether the given user_id has stored credentials."""
+    token = token_store.load_token(user_id, settings.token_store_path)
+    return {"authenticated": token is not None}
 
 
 @router.post("/google/start", response_model=GoogleAuthStartResponse)
@@ -149,12 +184,19 @@ def google_callback(
     with open(handoff_path, "w") as f:
         json.dump({"user_id": user_id}, f)
 
-    return JSONResponse(
-        {
-            "user_id": user_id,
-            "message": "Authentication successful. You can close this tab.",
-        }
-    )
+    return HTMLResponse("""
+<!doctype html>
+<html>
+<head><title>Authenticated</title></head>
+<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0f4f8;">
+  <div style="text-align:center;">
+    <h2 style="color:#1f5134;">&#10003; Google Drive connected!</h2>
+    <p style="color:#4b5563;">You can close this window and return to Weaver.</p>
+    <script>window.close();</script>
+  </div>
+</body>
+</html>
+""")
 
 
 @router.delete("/google")
