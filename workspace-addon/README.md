@@ -1,6 +1,6 @@
-# PKM Linker — Google Workspace Add-on
+# Weaver — Google Workspace Add-on
 
-Google Docs sidebar add-on that provides AI-powered completions and contextual document search, backed by the PKM Linker backend. Built with Google Apps Script (TypeScript via clasp).
+Google Docs sidebar add-on that provides AI-powered completions and contextual document search, backed by the Weaver backend. Built with Google Apps Script (TypeScript via clasp).
 
 ---
 
@@ -63,7 +63,7 @@ This opens a browser to authorize clasp with your Google account.
 
 **Option A — New script (easiest):**
 ```bash
-npx clasp create --type docs --title "PKM Linker"
+npx clasp create --type docs --title "Weaver"
 ```
 This creates a new standalone script and writes the `scriptId` to `.clasp.json` automatically.
 
@@ -84,9 +84,9 @@ clasp compiles the TypeScript and uploads all files in `src/` to Apps Script.
 ### 5. Open in Google Docs
 
 1. Open any Google Doc
-2. Click **Extensions** → **PKM Linker** → **Open sidebar**
+2. Click **Extensions** → **Weaver** → **Open sidebar**
    - If you don't see the menu, reload the page — the `onOpen` trigger adds it on document load
-3. In the sidebar settings, set your **Backend URL** (default: `http://localhost:3000`)
+3. In the sidebar settings, set your **Backend URL** (default: `http://localhost:8000`)
 4. Click **Index this folder** to index the Drive docs you want as context
 
 ---

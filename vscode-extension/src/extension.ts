@@ -4,6 +4,7 @@ import { ChatPanel }   from './chatPanel';
 import { extractContext } from './contextExtractor';
 import { search } from './searchClient';
 import { InlineCompletionProvider } from './inlineCompletionProvider';
+import { startBridgeServer } from './bridgeServer';
 
 export function activate(context: vscode.ExtensionContext): void {
   // ── Sidebar docs view (left, primary sidebar) ───────────────────────────
@@ -15,8 +16,12 @@ export function activate(context: vscode.ExtensionContext): void {
   // ── Chat panel (right, opens on command) ────────────────────────────────
   const chatPanel = ChatPanel.getInstance(context.extensionUri, context);
   context.subscriptions.push(
-    vscode.commands.registerCommand('pkmLinker.openChat', () => chatPanel.open())
+    vscode.commands.registerCommand('weaver.openChat', () => chatPanel.open())
   );
+
+  // ── Desktop panel bridge server ──────────────────────────────────────────
+  const bridgeServer = startBridgeServer(chatPanel);
+  context.subscriptions.push({ dispose: () => bridgeServer.close() });
 
   // ── Inline completion provider ───────────────────────────────────────────
   const inlineProvider = new InlineCompletionProvider();
@@ -36,7 +41,7 @@ export function activate(context: vscode.ExtensionContext): void {
     clearTimeout(debounceTimer);
 
     const debounceMs = vscode.workspace
-      .getConfiguration('pkmLinker')
+      .getConfiguration('weaver')
       .get<number>('debounceMs', 500);
 
     debounceTimer = setTimeout(async () => {
@@ -44,8 +49,8 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!ctx) { return; }
 
       const backendUrl = vscode.workspace
-        .getConfiguration('pkmLinker')
-        .get<string>('backendUrl', 'http://localhost:3000');
+        .getConfiguration('weaver')
+        .get<string>('backendUrl', 'http://localhost:8000');
 
       docsView.showLoading(ctx.query);
 

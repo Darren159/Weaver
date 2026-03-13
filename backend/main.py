@@ -8,6 +8,7 @@ from backend.drive.router import router as drive_router
 from backend.search.router import router as search_router
 from backend.ingest.router import router as ingest_router
 from backend.model_config import router as model_router
+from backend.agents.router import router as agents_router
 from backend.elastic import ensure_indices
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -24,7 +25,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -34,6 +35,7 @@ app.include_router(drive_router)
 app.include_router(search_router)
 app.include_router(ingest_router)
 app.include_router(model_router)
+app.include_router(agents_router)
 
 
 @app.get("/health", tags=["meta"])

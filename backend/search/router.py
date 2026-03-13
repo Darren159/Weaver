@@ -10,6 +10,25 @@ from backend.model_config import ModelState
 
 router = APIRouter(prefix="/api", tags=["search"])
 
+from backend.elastic import get_client, ALL_INDICES, DRIVE_INDEX, GITHUB_INDEX
+
+_ALLOWED_INDICES = {DRIVE_INDEX, GITHUB_INDEX, ALL_INDICES}
+
+router = APIRouter(prefix="/api", tags=["search"])
+
+LLM_INFERENCE_ID = ".anthropic-claude-3.7-sonnet-chat_completion"
+
+VALID_INDICES = {DRIVE_INDEX, GITHUB_INDEX}
+
+
+def _resolve_index(body: dict) -> str:
+    requested_index = str(body.get("index", "")).strip()
+    if not requested_index:
+        return ALL_INDICES
+    if requested_index not in VALID_INDICES:
+        raise ValueError(f"Unsupported index '{requested_index}'")
+    return requested_index
+
 
 # ── Search ────────────────────────────────────────────────────────────────────
 
@@ -18,13 +37,22 @@ async def search(request: Request):
     body = await request.json()
     query = body.get("query", "").strip()
     size = body.get("size", 5)
+    index = body.get("index", ALL_INDICES)
+
+    if index not in _ALLOWED_INDICES:
+        return JSONResponse({"error": f"invalid index '{index}'"}, status_code=400)
 
     if not query:
         return JSONResponse({"error": "query is required"}, status_code=400)
 
     try:
+        index = _resolve_index(body)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    try:
         result = get_client().search(
-            index=ALL_INDICES,
+            index=index,
             retriever={
                 "rrf": {
                     "retrievers": [
@@ -75,13 +103,22 @@ async def complete(request: Request):
     suffix = body.get("suffix", "")
     language = body.get("language", "")
     query = body.get("query", "").strip()
+    index = body.get("index", ALL_INDICES)
+
+    if index not in _ALLOWED_INDICES:
+        return JSONResponse({"error": f"invalid index '{index}'"}, status_code=400)
 
     if not prefix or not query:
         return {"completion": ""}
 
     try:
+        index = _resolve_index(body)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    try:
         search_result = get_client().search(
-            index=ALL_INDICES,
+            index=index,
             retriever={
                 "rrf": {
                     "retrievers": [
@@ -101,18 +138,43 @@ async def complete(request: Request):
             size=3,
         )
 
-        api_parts = []
-        for hit in search_result["hits"]["hits"]:
-            s = hit["_source"]
-            parts = [f"{s.get('method', '')} {s.get('endpoint', '')}"]
-            if s.get("title"):
-                parts.append(f"// {s['title']}")
-            if s.get("parameters"):
-                parts.append(f"Parameters:\n{s['parameters']}")
-            if s.get("request_body"):
-                parts.append(f"Example:\n{str(s['request_body'])[:300]}")
-            api_parts.append("\n".join(parts))
-        api_context = "\n---\n".join(api_parts)
+        rag_context = "\n---\n".join(
+            f"[{s.get('title', '')}]\n{s.get('content', '')[:400]}"
+            for hit in search_result["hits"]["hits"]
+            for s in [hit["_source"]]
+        )
+
+        is_doc = language.lower() == "google-docs"
+
+        if is_doc:
+            system_prompt = (
+                "You are a professional business writing assistant. "
+                "The user is composing a document and you must complete their text naturally. "
+                "Use specific details — names, roles, emails, funding amounts, technical interests — "
+                "from the provided context to write precise, substantive prose. "
+                "Continue directly from where the text cuts off. Do not repeat the preceding text. "
+                "Write 2-4 sentences. No markdown, no preamble, no explanation."
+            )
+            user_content = (
+                f"Relevant partner/knowledge-base context:\n{rag_context}\n\n"
+                f"Document text before cursor:\n{prefix[-1200:]}\n\n"
+                f"Document text after cursor:\n{suffix[:300]}\n\n"
+                "Continue the text at the cursor position:"
+            )
+        else:
+            system_prompt = (
+                "You are a code completion assistant. Given the user's code context "
+                "and relevant knowledge-base excerpts, provide ONLY the code that should "
+                "come next. Do not include explanations, markdown, or code fences. "
+                "Just output the raw code completion (1-5 lines max)."
+            )
+            user_content = (
+                f"Language: {language}\n\n"
+                f"Relevant context:\n{rag_context}\n\n"
+                f"Code before cursor:\n{prefix[-800:]}\n\n"
+                f"Code after cursor:\n{suffix[:200]}\n\n"
+                "Complete the code at the cursor position:"
+            )
 
         llm_messages = [
             {
@@ -135,6 +197,13 @@ async def complete(request: Request):
                 ),
             },
         ]
+        url = f"{settings.es_node.rstrip('/')}/_inference/chat_completion/{LLM_INFERENCE_ID}/_stream"
+        llm_body = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_content},
+            ],
+        }
 
         def token_stream():
             try:
@@ -186,6 +255,11 @@ async def chat(request: Request):
     if not messages:
         return JSONResponse({"error": "messages is required"}, status_code=400)
 
+    try:
+        index = _resolve_index(body)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
     last_user = next(
         (m["content"] for m in reversed(messages) if m.get("role") == "user"), ""
     )
@@ -195,7 +269,7 @@ async def chat(request: Request):
     if query:
         try:
             search_result = get_client().search(
-                index=ALL_INDICES,
+                index=index,
                 retriever={
                     "rrf": {
                         "retrievers": [
@@ -218,9 +292,7 @@ async def chat(request: Request):
             for hit in search_result["hits"]["hits"]:
                 s = hit["_source"]
                 snippet = s.get("content", "")[:400]
-                parts.append(
-                    f"[{s.get('title', '')}]\n{s.get('method', '')} {s.get('endpoint', '')}\n{snippet}"
-                )
+                parts.append(f"[{s.get('title', '')}]\n{snippet}")
             rag_context = "\n---\n".join(parts)
         except Exception as e:
             print(f"[chat] RAG search error: {e}")

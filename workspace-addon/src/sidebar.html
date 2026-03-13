@@ -188,7 +188,7 @@
 <body>
 
   <div class="header">
-    <h1>PKM Linker</h1>
+    <h1>Weaver</h1>
     <div class="doc-title" id="doc-title">Loading…</div>
     <div class="auto-row">
       <span class="auto-label">Auto-complete</span>
@@ -225,7 +225,7 @@
     <summary>Settings</summary>
     <div class="settings-body">
       <label for="backend-url-input">Backend URL</label>
-      <input type="text" id="backend-url-input" placeholder="http://localhost:3000">
+      <input type="text" id="backend-url-input" placeholder="http://localhost:8000">
       <button class="btn-secondary" onclick="saveBackendUrl()" style="margin-top:8px">Save</button>
 
       <hr>
@@ -239,7 +239,7 @@
   <script>
     // ── State ──────────────────────────────────────────────────────────────────
 
-    var backendUrl    = 'http://localhost:3000';
+    var backendUrl    = 'http://localhost:8000';
     var suggestion    = '';
     var abortCtrl     = null;
     var searchTimeout = null;
@@ -372,6 +372,7 @@
           suffix:   ctx.suffix,
           language: 'google-docs',
           query:    ctx.prefix.slice(-150).trim(),
+          index:    'drive-docs',
         }),
         signal: abortCtrl.signal,
       })
@@ -485,7 +486,7 @@
       fetch(backendUrl + '/api/search', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ query: query, size: 5 }),
+        body:    JSON.stringify({ query: query, size: 5, index: 'drive-docs' }),
       })
       .then(function(r) { return r.json(); })
       .then(function(data) { renderResults(data.results || []); })

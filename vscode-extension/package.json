@@ -1,7 +1,7 @@
 {
-  "name": "pkm-linker",
-  "displayName": "PKM Linker",
-  "description": "Surfaces related API docs as you code + inline completions, powered by Elasticsearch hybrid search (BM25 + ELSER) and LLM",
+  "name": "weaver",
+  "displayName": "Weaver",
+  "description": "Surfaces related docs as you code + inline completions, powered by Elasticsearch hybrid search (BM25 + ELSER) and LLM",
   "version": "0.1.0",
   "engines": {
     "vscode": "^1.110.0"
@@ -13,31 +13,31 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "pkmLinker",
-          "title": "PKM Linker",
+          "id": "weaver",
+          "title": "Weaver",
           "icon": "resources/icon.svg"
         }
       ]
     },
     "views": {
-      "pkmLinker": [
+      "weaver": [
         {
           "type": "webview",
-          "id": "pkmLinker.docsView",
+          "id": "weaver.docsView",
           "name": "Related Docs"
         }
       ]
     },
     "commands": [
       {
-        "command": "pkmLinker.openChat",
-        "title": "PKM Linker: Open Chat",
+        "command": "weaver.openChat",
+        "title": "Weaver: Open Chat",
         "icon": "$(comment-discussion)"
       }
     ],
     "keybindings": [
       {
-        "command": "pkmLinker.openChat",
+        "command": "weaver.openChat",
         "key": "ctrl+shift+k",
         "mac": "cmd+shift+k"
       }
@@ -45,23 +45,28 @@
     "menus": {
       "editor/title": [
         {
-          "command": "pkmLinker.openChat",
+          "command": "weaver.openChat",
           "group": "navigation"
         }
       ]
     },
     "configuration": {
-      "title": "PKM Linker",
+      "title": "Weaver",
       "properties": {
-        "pkmLinker.backendUrl": {
+        "weaver.backendUrl": {
           "type": "string",
-          "default": "http://localhost:3000",
-          "description": "URL of the PKM Linker backend API"
+          "default": "http://localhost:8000",
+          "description": "URL of the Weaver backend API"
         },
-        "pkmLinker.debounceMs": {
+        "weaver.debounceMs": {
           "type": "number",
           "default": 500,
-          "description": "Debounce delay (ms) before triggering an API doc search on cursor move"
+          "description": "Debounce delay (ms) before triggering a doc search on cursor move"
+        },
+        "weaver.bridgePort": {
+          "type": "number",
+          "default": 8765,
+          "description": "Port for the Weaver desktop panel bridge server (used to apply code edits from the floating panel)"
         }
       }
     }

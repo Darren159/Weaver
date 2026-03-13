@@ -1,10 +1,10 @@
-// Code.ts — Server-side Apps Script for PKM Linker Google Workspace Add-on
+// Code.ts — Server-side Apps Script for Weaver Google Workspace Add-on
 //
 // All functions in this file run on Google's servers (not in the browser).
 // They are called from sidebar.html via google.script.run.functionName().
 //
 // Provides:
-//   onOpen            — adds "PKM Linker" menu to Google Docs
+//   onOpen            — adds "Weaver" menu to Google Docs
 //   showSidebar       — opens the HTML sidebar panel
 //   getCursorContext  — reads text around the cursor (prefix + suffix)
 //   insertAtCursor    — inserts text at the current cursor position
@@ -38,15 +38,15 @@ interface IngestDoc {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function onOpen(): void {
   DocumentApp.getUi()
-    .createMenu('PKM Linker')
+    .createMenu('Weaver')
     .addItem('Open sidebar', 'showSidebar')
     .addToUi();
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function showSidebar(): void {
-  const html = HtmlService.createHtmlOutputFromFile('src/sidebar')
-    .setTitle('PKM Linker')
+  const html = HtmlService.createHtmlOutputFromFile('sidebar')
+    .setTitle('Weaver')
     .setWidth(320);
   DocumentApp.getUi().showSidebar(html);
 }
@@ -104,7 +104,7 @@ function insertAtCursor(text: string): void {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getBackendUrl(): string {
   return PropertiesService.getUserProperties()
-    .getProperty('backendUrl') ?? 'http://localhost:3000';
+    .getProperty('backendUrl') ?? 'http://localhost:8000';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

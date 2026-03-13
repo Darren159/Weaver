@@ -1,9 +1,10 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   DriveFile,
   IngestResponse,
   UploadResponse,
+  AgentRecord,
   startGoogleAuth,
   checkAuthStatus,
   revokeAuth,
@@ -13,15 +14,121 @@ import {
   uploadFile,
   getActiveModel,
   setActiveModel,
+  listAgents,
 } from "./services/api";
 
 import "./styles.css";
 
+type Page = "ingest" | "agents";
 type Source = "upload" | "drive" | "github";
 
 const STORAGE_KEY = "weaver_drive_user_id";
 
+// ── Agents page ────────────────────────────────────────────────────────────────
+
+function AgentsView() {
+  const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const data = await listAgents();
+      setAgents(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load agents.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const selected = agents.find((a) => a.id === selectedId) ?? null;
+
+  return (
+    <div className="agents-layout">
+      {/* Left: agent list */}
+      <section className="panel fade-in agents-sidebar">
+        <div className="agents-list-header">
+          <h2>Agents</h2>
+          <button type="button" onClick={load} disabled={isLoading} className="refresh-btn">
+            {isLoading ? "…" : "Refresh"}
+          </button>
+        </div>
+
+        {error && <p className="error">{error}</p>}
+
+        {!isLoading && agents.length === 0 && !error && (
+          <p className="placeholder">No agents found in Elastic.</p>
+        )}
+
+        <ul className="agent-list">
+          {agents.map((agent) => (
+            <li
+              key={agent.id}
+              className={`agent-list-item${agent.id === selectedId ? " selected" : ""}`}
+              onClick={() => setSelectedId(agent.id === selectedId ? null : agent.id)}
+            >
+              <span className="agent-list-name">{agent.config.name}</span>
+              {agent.config.description && (
+                <span className="agent-list-desc">{agent.config.description}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Right: detail panel */}
+      <section className="panel fade-in agents-detail">
+        {selected ? (
+          <>
+            <h2 className="detail-name">{selected.config.name}</h2>
+            {selected.config.description && (
+              <p className="agent-description">{selected.config.description}</p>
+            )}
+
+            <div className="detail-section">
+              <div className="detail-label">System instructions</div>
+              <pre className="detail-instructions">{selected.config.system_instructions}</pre>
+            </div>
+
+            {selected.config.tools.length > 0 && (
+              <div className="detail-section">
+                <div className="detail-label">Tools</div>
+                <div className="agent-tools">
+                  {selected.config.tools.map((t) => (
+                    <span
+                      key={t.name}
+                      className={`tool-badge${t.enabled ? "" : " tool-badge--disabled"}`}
+                    >
+                      {t.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="detail-section">
+              <div className="detail-label">Agent ID</div>
+              <code className="agent-id">{selected.id}</code>
+            </div>
+          </>
+        ) : (
+          <p className="placeholder">Select an agent to view its details.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+// ── Main App ───────────────────────────────────────────────────────────────────
+
 function App() {
+  const [page, setPage] = useState<Page>("ingest");
   const [source, setSource] = useState<Source>("upload");
 
   // Shared
@@ -290,8 +397,29 @@ function App() {
             ))}
           </select>
         </div>
+        <nav className="page-tabs" aria-label="Page navigation">
+          <button
+            type="button"
+            className={`tab-btn${page === "ingest" ? " active" : ""}`}
+            onClick={() => setPage("ingest")}
+          >
+            Ingest
+          </button>
+          <button
+            type="button"
+            className={`tab-btn${page === "agents" ? " active" : ""}`}
+            onClick={() => setPage("agents")}
+          >
+            Agents
+          </button>
+        </nav>
       </header>
 
+      {page === "agents" ? (
+        <main className="workspace">
+          <AgentsView />
+        </main>
+      ) : (
       <main className="workspace">
         <section className="source-select-wrap" aria-label="Source selector">
           <label className="source-select-label" htmlFor="source-select">
@@ -520,6 +648,7 @@ function App() {
           ) : null}
         </section>
       </main>
+      )}
     </div>
   );
 }

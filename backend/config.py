@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     es_node: str = ""
     es_api_key: str = ""
 
+    # Kibana / Fleet — KIBANA_URL / KIBANA_API_KEY
+    kibana_url: str = ""
+    kibana_api_key: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

@@ -5,14 +5,11 @@ import { URL }    from 'url';
 export interface SearchResult {
   id: string;
   title: string;
-  endpoint: string;
-  method: string;
-  parameters: string;
-  requestBody: string;
-  responseExample: string;
-  apiGroup: string;
+  content: string;
+  docType: string;
+  tags: string[];
+  source: string;
   score: number;
-  source?: string;
 }
 
 export interface SearchResponse {
@@ -70,7 +67,7 @@ export function search(
   backendUrl: string,
   query: string,
 ): Promise<SearchResponse> {
-  return post<SearchResponse>(`${backendUrl}/api/search`, { query, size: 5 });
+  return post<SearchResponse>(`${backendUrl}/api/search`, { query, size: 5, index: 'github-docs' });
 }
 
 // completeStream fires a POST to /api/complete and calls onToken for each
@@ -88,7 +85,7 @@ export function completeStream(
   onCancel?: (abort: () => void) => void,
 ): void {
   const parsed  = new URL(`${backendUrl}/api/complete`);
-  const payload = JSON.stringify({ prefix, suffix, language, query });
+  const payload = JSON.stringify({ prefix, suffix, language, query, index: 'github-docs' });
   const lib     = parsed.protocol === 'https:' ? https : http;
 
   const req = lib.request(

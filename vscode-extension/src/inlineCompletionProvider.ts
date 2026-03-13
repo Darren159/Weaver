@@ -60,7 +60,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     // Debounce: wait for the user to pause before sending the request.
     const callGen = ++this.callGeneration;
     const debounceMs = vscode.workspace
-      .getConfiguration('pkmLinker')
+      .getConfiguration('weaver')
       .get<number>('debounceMs', 500);
     await new Promise<void>(resolve => setTimeout(resolve, debounceMs));
 
@@ -72,8 +72,13 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document !== document) { return []; }
 
-    const ctx = extractContext(editor);
-    if (!ctx) { return []; }
+    let ctx = extractContext(editor);
+    if (!ctx) {
+      // Blank line or short content — derive query from nearby non-blank lines.
+      const fallbackQuery = deriveFallbackQuery(prefix, document.languageId);
+      if (!fallbackQuery) { return []; }
+      ctx = { query: fallbackQuery, language: document.languageId, filePath: document.uri.fsPath, currentLine: '' };
+    }
 
     const suffix = document.getText(new vscode.Range(
       position,
@@ -81,8 +86,8 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     ));
 
     const backendUrl = vscode.workspace
-      .getConfiguration('pkmLinker')
-      .get<string>('backendUrl', 'http://localhost:3000');
+      .getConfiguration('weaver')
+      .get<string>('backendUrl', 'http://localhost:8000');
 
     // Mark the stream as started BEFORE the async callbacks fire.
     this.inflightDocGen   = docGen;
@@ -127,4 +132,36 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     // the first chunk of ghost text. Subsequent tokens keep extending it.
     return [];
   }
+}
+
+const KEYWORDS = new Set([
+  'const','let','var','function','return','await','async','new','this',
+  'import','from','require','export','default','class','extends','if','else',
+  'for','while','switch','case','break','try','catch','throw','typeof',
+]);
+
+/** Build a search query from recent non-blank, non-comment lines in the prefix. */
+function deriveFallbackQuery(prefix: string, _languageId: string): string | null {
+  const lines = prefix.split('\n').reverse();
+  const parts: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || /^(\/\/|\/\*|\*|#|--|<!--)/.test(trimmed)) { continue; }
+
+    const methodCalls = trimmed.match(/\b([a-zA-Z_$]\w*\.[a-zA-Z_$]\w*)/g);
+    if (methodCalls) {
+      parts.push(...[...new Set(methodCalls)].slice(0, 3));
+      break;
+    }
+
+    const cleaned = trimmed.replace(/[{}()[\];,=<>!&|+\-*/?.:'"`]/g, ' ').trim();
+    const tokens = cleaned.split(/\s+/)
+      .filter(t => t.length > 2 && !KEYWORDS.has(t) && /^[a-zA-Z_$]/.test(t))
+      .slice(0, 3);
+    if (tokens.length) { parts.push(...tokens); break; }
+  }
+
+  const query = parts.join(' ').trim();
+  return query.length >= 3 ? query : null;
 }
