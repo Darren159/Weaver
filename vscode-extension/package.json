@@ -1,0 +1,87 @@
+{
+  "name": "pkm-linker",
+  "displayName": "PKM Linker",
+  "description": "Surfaces related API docs as you code + inline completions, powered by Elasticsearch hybrid search (BM25 + ELSER) and LLM",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pkmLinker",
+          "title": "PKM Linker",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "pkmLinker": [
+        {
+          "type": "webview",
+          "id": "pkmLinker.docsView",
+          "name": "Related Docs"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "pkmLinker.openChat",
+        "title": "PKM Linker: Open Chat",
+        "icon": "$(comment-discussion)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "pkmLinker.openChat",
+        "key": "ctrl+shift+k",
+        "mac": "cmd+shift+k"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "pkmLinker.openChat",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "PKM Linker",
+      "properties": {
+        "pkmLinker.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "URL of the PKM Linker backend API"
+        },
+        "pkmLinker.debounceMs": {
+          "type": "number",
+          "default": 500,
+          "description": "Debounce delay (ms) before triggering an API doc search on cursor move"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.110.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.56.1",
+    "eslint": "^9.39.3",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
