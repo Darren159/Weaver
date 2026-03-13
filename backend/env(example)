@@ -12,3 +12,8 @@ OAUTH_REDIRECT_URI=http://localhost:8000/auth/google/callback
 
 # JWT signing key – change to a long random string in production
 SECRET_KEY=change-me-in-production
+
+# AWS Bedrock Credentials
+AWS_ACCESS_KEY_ID=your-aws-access-key-id
+AWS_SECRET_ACCESS_KEY=your-aws-secret-access-key
+AWS_REGION=us-east-1

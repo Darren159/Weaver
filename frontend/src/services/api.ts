@@ -20,6 +20,25 @@ export type UploadResponse = {
   errors: string[];
 };
 
+export type ToolConfig = {
+  name: string;
+  enabled: boolean;
+  config?: Record<string, unknown> | null;
+};
+
+export type AgentConfig = {
+  name: string;
+  description?: string;
+  system_instructions: string;
+  tools: ToolConfig[];
+  metadata?: Record<string, unknown> | null;
+};
+
+export type AgentRecord = {
+  id: string;
+  config: AgentConfig;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 function authorizationHeader(userId: string): string {
@@ -154,6 +173,51 @@ export async function uploadFile(params: {
   }
 
   return (await response.json()) as UploadResponse;
+}
+
+export async function getActiveModel(): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/api/model`);
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  const data = await response.json();
+  return data.model_id;
+}
+
+export async function setActiveModel(model_id: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/api/model`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model_id }),
+export async function listAgents(): Promise<AgentRecord[]> {
+  const response = await fetch(`${API_BASE_URL}/agents`);
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return (await response.json()) as AgentRecord[];
+}
+
+export async function createAgent(config: AgentConfig): Promise<AgentRecord> {
+  const response = await fetch(`${API_BASE_URL}/agents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  const data = await response.json();
+  return data.model_id;
+  return (await response.json()) as AgentRecord;
+}
+
+export async function deleteAgent(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/agents/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok && response.status !== 204) {
+    throw new Error(await parseError(response));
+  }
 }
 
 export { API_BASE_URL };

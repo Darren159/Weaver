@@ -30,6 +30,10 @@ body {
   margin: 8px 0 22px;
   text-align: center;
   animation: rise-in 420ms ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
 }
 
 .topbar h1 {
@@ -38,6 +42,38 @@ body {
   letter-spacing: -0.032em;
   color: #f6f8fb;
   text-shadow: 0 2px 18px rgba(24, 31, 43, 0.32);
+}
+
+/* Page tabs */
+.page-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.tab-btn {
+  border: 1px solid rgba(220, 226, 232, 0.55);
+  background: rgba(241, 244, 247, 0.18);
+  color: rgba(241, 244, 247, 0.85);
+  border-radius: 999px;
+  padding: 7px 22px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  backdrop-filter: blur(4px);
+}
+
+.tab-btn:hover:not(.active) {
+  background: rgba(241, 244, 247, 0.28);
+  color: #f6f8fb;
+}
+
+.tab-btn.active {
+  border-color: #1f2937;
+  background: linear-gradient(180deg, #2f3a48 0%, #1f2937 100%);
+  color: #f8fafc;
+  box-shadow: 0 4px 14px rgba(17, 24, 39, 0.3);
 }
 
 .workspace {
@@ -343,6 +379,164 @@ pre {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* ── Agents page ─────────────────────────────────────────────────────────── */
+
+.agents-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.agents-sidebar {
+  min-width: 0;
+}
+
+.agents-detail {
+  min-width: 0;
+  min-height: 260px;
+}
+
+.agents-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.agents-list-header h2 {
+  margin: 0;
+}
+
+.refresh-btn {
+  font-size: 0.82rem;
+  padding: 5px 13px;
+  border-color: #9ca5b1;
+  color: #4b5563;
+}
+
+/* Agent list (sidebar) */
+.agent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.agent-list-item {
+  border: 1px solid #c2cad4;
+  border-radius: 11px;
+  padding: 10px 13px;
+  background: rgba(243, 246, 249, 0.8);
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.agent-list-item:hover {
+  border-color: #7d8896;
+  background: rgba(237, 241, 245, 0.95);
+  box-shadow: 0 4px 12px rgba(17, 24, 39, 0.1);
+}
+
+.agent-list-item.selected {
+  border-color: #1f2937;
+  background: linear-gradient(168deg, rgba(241, 244, 247, 0.98) 0%, rgba(222, 228, 234, 0.98) 100%);
+  box-shadow: 0 4px 16px rgba(17, 24, 39, 0.14);
+}
+
+.agent-list-name {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #0f172a;
+}
+
+.agent-list-desc {
+  font-size: 0.78rem;
+  color: #5a6475;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Detail panel */
+.detail-name {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+  color: #0f172a;
+}
+
+.agent-description {
+  margin: 0 0 16px;
+  font-size: 0.88rem;
+  color: #4b5563;
+}
+
+.detail-section {
+  margin-top: 16px;
+}
+
+.detail-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+.detail-instructions {
+  margin: 0;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #1f2937;
+  background: rgba(240, 243, 247, 0.7);
+  border: 1px solid #c8d0da;
+  border-radius: 10px;
+  padding: 10px 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agent-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tool-badge {
+  display: inline-block;
+  background: rgba(31, 41, 55, 0.1);
+  border: 1px solid rgba(31, 41, 55, 0.2);
+  color: #1f2937;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.tool-badge--disabled {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.agent-id {
+  font-size: 0.76rem;
+  color: #6b7280;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+@media (max-width: 640px) {
+  .agents-layout {
+    grid-template-columns: 1fr;
   }
 }
 

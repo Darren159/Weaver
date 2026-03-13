@@ -1,19 +1,16 @@
 import json
 import time
-import httpx
+import boto3
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.requests import Request
 
-from backend.config import settings
 from backend.elastic import get_client, ALL_INDICES, DRIVE_INDEX, GITHUB_INDEX
-
-_ALLOWED_INDICES = {DRIVE_INDEX, GITHUB_INDEX, ALL_INDICES}
+from backend.model_config import ModelState
 
 router = APIRouter(prefix="/api", tags=["search"])
 
-LLM_INFERENCE_ID = ".anthropic-claude-3.7-sonnet-chat_completion"
-
+_ALLOWED_INDICES = {DRIVE_INDEX, GITHUB_INDEX, ALL_INDICES}
 VALID_INDICES = {DRIVE_INDEX, GITHUB_INDEX}
 
 
@@ -172,40 +169,36 @@ async def complete(request: Request):
                 "Complete the code at the cursor position:"
             )
 
-        url = f"{settings.es_node.rstrip('/')}/_inference/chat_completion/{LLM_INFERENCE_ID}/_stream"
-        llm_body = {
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_content},
-            ],
-        }
+        llm_messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_content},
+        ]
 
-        async def token_stream():
+        def token_stream():
             try:
-                async with httpx.AsyncClient(timeout=30.0) as http_client:
-                    async with http_client.stream(
-                        "POST", url, json=llm_body,
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"ApiKey {settings.es_api_key}",
-                        },
-                    ) as resp:
-                        async for line in resp.aiter_lines():
-                            if not line.startswith("data: "):
-                                continue
-                            data = line[6:].strip()
-                            if data == "[DONE]":
-                                yield "data: [DONE]\n\n"
-                                return
-                            try:
-                                parsed = json.loads(data)
-                                delta = parsed.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                                if delta:
-                                    yield f"data: {json.dumps({'token': delta})}\n\n"
-                            except json.JSONDecodeError:
-                                pass
+                client = boto3.client("bedrock-runtime", region_name="us-east-1")
+                system_texts = [{"text": m["content"]} for m in llm_messages if m["role"] == "system"]
+                bedrock_messages = [
+                    {"role": m["role"], "content": [{"text": m["content"]}]}
+                    for m in llm_messages if m["role"] in ("user", "assistant")
+                ]
+
+                print(f"[complete] Calling Bedrock model: {ModelState.active_model_id}")
+                response = client.converse_stream(
+                    modelId=ModelState.active_model_id,
+                    messages=bedrock_messages,
+                    system=system_texts,
+                )
+
+                for event in response.get("stream") or []:
+                    if "contentBlockDelta" in event:
+                        delta = event["contentBlockDelta"]["delta"]
+                        if "text" in delta:
+                            yield f"data: {json.dumps({'token': delta['text']})}\n\n"
+                yield "data: [DONE]\n\n"
             except Exception as e:
-                print(f"[complete] stream error: {e}")
+                print(f"[complete] Bedrock stream error: {type(e).__name__}: {e}")
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
                 yield "data: [DONE]\n\n"
 
         return StreamingResponse(token_stream(), media_type="text/event-stream")
@@ -288,34 +281,30 @@ async def chat(request: Request):
         system_parts.append(f"Relevant knowledge-base context:\n{rag_context}")
 
     llm_messages = [{"role": "system", "content": "\n\n".join(system_parts)}] + messages
-    url = f"{settings.es_node.rstrip('/')}/_inference/chat_completion/{LLM_INFERENCE_ID}/_stream"
 
-    async def token_stream():
+    def token_stream():
         try:
-            async with httpx.AsyncClient(timeout=60.0) as http_client:
-                async with http_client.stream(
-                    "POST", url, json={"messages": llm_messages},
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"ApiKey {settings.es_api_key}",
-                    },
-                ) as resp:
-                    async for line in resp.aiter_lines():
-                        if not line.startswith("data: "):
-                            continue
-                        data = line[6:].strip()
-                        if data == "[DONE]":
-                            yield "data: [DONE]\n\n"
-                            return
-                        try:
-                            parsed = json.loads(data)
-                            delta = parsed.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                            if delta:
-                                yield f"data: {json.dumps({'token': delta})}\n\n"
-                        except json.JSONDecodeError:
-                            pass
+            client = boto3.client("bedrock-runtime", region_name="us-east-1")
+            system_texts = [{"text": m["content"]} for m in llm_messages if m["role"] == "system"]
+            bedrock_messages = [
+                {"role": m["role"], "content": [{"text": m["content"]}]}
+                for m in llm_messages if m["role"] in ("user", "assistant")
+            ]
+            print(f"[chat] Calling Bedrock model: {ModelState.active_model_id}")
+            response = client.converse_stream(
+                modelId=ModelState.active_model_id,
+                messages=bedrock_messages,
+                system=system_texts,
+            )
+            for event in response.get("stream") or []:
+                if "contentBlockDelta" in event:
+                    delta = event["contentBlockDelta"]["delta"]
+                    if "text" in delta:
+                        yield f"data: {json.dumps({'token': delta['text']})}\n\n"
+            yield "data: [DONE]\n\n"
         except Exception as e:
-            print(f"[chat] stream error: {e}")
+            print(f"[chat] Bedrock stream error: {type(e).__name__}: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(token_stream(), media_type="text/event-stream")

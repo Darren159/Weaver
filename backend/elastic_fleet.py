@@ -66,7 +66,15 @@ async def _request(
         raise HTTPException(status_code=502, detail="Invalid response from Fleet API")
 
 
-# ── Agent policies ──────────────────────────────────────────────────────────────
+# ── Agent Builder ──────────────────────────────────────────────────────────────
+
+
+async def list_agent_builder_agents() -> Dict[str, Any]:
+    """GET /api/agent_builder/agents — returns all agents from the Kibana Agent Builder."""
+    return await _request("GET", "/api/agent_builder/agents")
+
+
+# ── Fleet agent policies ────────────────────────────────────────────────────────
 
 
 async def list_agent_policies() -> Dict[str, Any]:
