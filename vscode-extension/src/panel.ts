@@ -4,7 +4,7 @@ import { SearchResult } from './searchClient';
 // ApiDocsView is a WebviewViewProvider — it registers as a sidebar view
 // in the primary sidebar (left). VS Code shows it in the activity bar.
 export class ApiDocsView implements vscode.WebviewViewProvider {
-  public static readonly viewType = 'pkmLinker.docsView';
+  public static readonly viewType = 'weaver.docsView';
 
   private _view?: vscode.WebviewView;
 

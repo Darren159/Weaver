@@ -60,7 +60,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     // Debounce: wait for the user to pause before sending the request.
     const callGen = ++this.callGeneration;
     const debounceMs = vscode.workspace
-      .getConfiguration('pkmLinker')
+      .getConfiguration('weaver')
       .get<number>('debounceMs', 500);
     await new Promise<void>(resolve => setTimeout(resolve, debounceMs));
 
@@ -81,7 +81,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     ));
 
     const backendUrl = vscode.workspace
-      .getConfiguration('pkmLinker')
+      .getConfiguration('weaver')
       .get<string>('backendUrl', 'http://localhost:8000');
 
     // Mark the stream as started BEFORE the async callbacks fire.
