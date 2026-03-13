@@ -1,0 +1,255 @@
+{
+  "info": {
+    "name": "Elastic Hackathon API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Full test suite for the Elastic Hackathon backend.\n\n**Setup:**\n1. Set `baseUrl` variable to `http://localhost:8000`\n2. Run **Auth → Start OAuth flow** in a browser (not Postman) to get a `user_id`\n3. Set the `userId` variable to that value\n4. All Drive endpoints use `Authorization: Bearer {{userId}}`"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000", "type": "string" },
+    { "key": "userId", "value": "", "type": "string", "description": "Returned from GET /auth/google/callback after OAuth" }
+  ],
+  "item": [
+    {
+      "name": "Meta",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health",
+            "description": "Confirms the server is running."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Start Google OAuth (browser only)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/google",
+            "description": "Open this URL in a browser. Redirects to Google consent screen, then back to /auth/google/callback which returns a user_id. Copy that user_id into the `userId` collection variable."
+          }
+        },
+        {
+          "name": "Start OAuth with custom credentials",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/google/start",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": \"your-client-id.apps.googleusercontent.com\",\n  \"client_secret\": \"your-client-secret\",\n  \"redirect_uri\": \"http://localhost:8000/auth/google/callback\"\n}"
+            },
+            "description": "Alternative auth start that accepts custom OAuth credentials."
+          }
+        },
+        {
+          "name": "Revoke credentials",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/auth/google",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userId}}" }],
+            "description": "Revokes the stored Google token for this user."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Drive",
+      "item": [
+        {
+          "name": "List folder (shallow)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/folders/list?folder_link=https://drive.google.com/drive/folders/FOLDER_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["folders", "list"],
+              "query": [
+                { "key": "folder_link", "value": "https://drive.google.com/drive/folders/FOLDER_ID", "description": "Drive folder URL or raw folder ID" },
+                { "key": "recursive", "value": "false", "disabled": true },
+                { "key": "max_files", "value": "20", "disabled": true }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{userId}}" }],
+            "description": "Lists files in a Drive folder without downloading. Set recursive=true to include subfolders."
+          }
+        },
+        {
+          "name": "List folder (recursive)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/folders/list?folder_link=https://drive.google.com/drive/folders/FOLDER_ID&recursive=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["folders", "list"],
+              "query": [
+                { "key": "folder_link", "value": "https://drive.google.com/drive/folders/FOLDER_ID" },
+                { "key": "recursive", "value": "true" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{userId}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ingest",
+      "item": [
+        {
+          "name": "Ingest Drive folder",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/ingest/drive",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folder_link\": \"https://drive.google.com/drive/folders/FOLDER_ID\",\n  \"recursive\": false\n}"
+            },
+            "description": "Downloads all PDFs and Google Docs from a Drive folder in-memory, chunks them, and indexes into `drive-docs`. Requires Google auth.\n\nResponse: `{ indexed, files_processed, skipped, errors }`"
+          }
+        },
+        {
+          "name": "Ingest Drive folder (recursive)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/ingest/drive",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folder_link\": \"https://drive.google.com/drive/folders/FOLDER_ID\",\n  \"recursive\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Ingest GitHub repo",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/ingest/github",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://github.com/nodejs/node/tree/main/doc/api\"\n}"
+            },
+            "description": "Fetches all .md files from a public GitHub repo/folder, chunks them, and indexes into `github-docs`. No auth needed for public repos.\n\nResponse: `{ indexed, files_processed, skipped, errors }`"
+          }
+        },
+        {
+          "name": "Ingest GitHub (private repo)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/ingest/github",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://github.com/your-org/your-private-repo/tree/main/docs\",\n  \"token\": \"ghp_your_github_pat\"\n}"
+            },
+            "description": "Same as above but with a GitHub Personal Access Token for private repos."
+          }
+        },
+        {
+          "name": "Ingest GitHub (specific subfolder)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/ingest/github",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://github.com/expressjs/express/tree/master/lib\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search & AI",
+      "item": [
+        {
+          "name": "Hybrid search",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/search",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"how to use SQLite in Node.js\",\n  \"size\": 5\n}"
+            },
+            "description": "RRF hybrid search across both `drive-docs` and `github-docs` (BM25 + ELSER semantic).\n\nResponse: `{ results: [{ id, index, title, content, score, source, docType, tags }], total }`"
+          }
+        },
+        {
+          "name": "Hybrid search (more results)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/search",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"authentication middleware\",\n  \"size\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "Code completion (streaming)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/complete",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prefix\": \"const db = new DatabaseSync(':memory:');\\ndb.\",\n  \"suffix\": \"\",\n  \"language\": \"javascript\",\n  \"query\": \"SQLite exec prepare\"\n}"
+            },
+            "description": "Retrieves relevant docs from both indices then streams a code completion via Claude 3.7 through Elasticsearch inference.\n\nReturns SSE stream: `data: {\"token\": \"...\"}` lines ending with `data: [DONE]`"
+          }
+        },
+        {
+          "name": "RAG chat (streaming)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"How do I open an in-memory SQLite database in Node.js?\" }\n  ]\n}"
+            },
+            "description": "Multi-turn RAG chat. Searches indexed docs for context, then streams a response via Claude 3.7.\n\nReturns SSE stream: `data: {\"token\": \"...\"}` lines ending with `data: [DONE]`"
+          }
+        },
+        {
+          "name": "RAG chat (multi-turn)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"How do I open an in-memory SQLite database?\" },\n    { \"role\": \"assistant\", \"content\": \"Use `new DatabaseSync(':memory:')` from the `node:sqlite` module.\" },\n    { \"role\": \"user\", \"content\": \"How do I run a query on it?\" }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "RAG chat (with file context)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"What is wrong with this code?\" }\n  ],\n  \"fileName\": \"db.js\",\n  \"fileContext\": \"const db = new DatabaseSync(':memory:');\\ndb.exec('CREATE TABLE users (id INT, name TEXT)');\\ndb.prepare('INSERT INTO users VALUES (1, Alice)').run();\"\n}"
+            },
+            "description": "Sends the current open file as context so Claude can reason about it alongside retrieved docs."
+          }
+        }
+      ]
+    }
+  ]
+}
