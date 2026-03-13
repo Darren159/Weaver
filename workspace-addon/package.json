@@ -1,0 +1,16 @@
+{
+  "name": "pkm-linker-workspace-addon",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "push":  "clasp push",
+    "watch": "clasp push --watch",
+    "open":  "clasp open",
+    "login": "clasp login"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "@types/google-apps-script": "^1.0.83",
+    "typescript": "^5.4.0"
+  }
+}
