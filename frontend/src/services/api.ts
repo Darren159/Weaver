@@ -156,4 +156,26 @@ export async function uploadFile(params: {
   return (await response.json()) as UploadResponse;
 }
 
+export async function getActiveModel(): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/api/model`);
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  const data = await response.json();
+  return data.model_id;
+}
+
+export async function setActiveModel(model_id: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/api/model`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model_id }),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  const data = await response.json();
+  return data.model_id;
+}
+
 export { API_BASE_URL };
