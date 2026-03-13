@@ -30,10 +30,10 @@ export default function App() {
         <button
           type="button"
           className="close-btn"
-          title="Hide panel"
-          onClick={() => window.electronAPI.hideWindow()}
+          title="Minimize"
+          onClick={() => window.electronAPI.minimizeWindow()}
         >
-          ×
+          _
         </button>
       </header>
 

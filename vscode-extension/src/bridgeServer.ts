@@ -1,6 +1,6 @@
 import * as http from 'http';
 import * as vscode from 'vscode';
-import { ChatPanel } from './chatPanel';
+import { ApplyService } from './applyService';
 
 function json(res: http.ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -14,21 +14,54 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
   res.end(payload);
 }
 
-function readBody(req: http.IncomingMessage): Promise<string> {
+function readBody(req: http.IncomingMessage, maxBytes: number, timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', (chunk: Buffer) => { data += chunk.toString(); });
-    req.on('end', () => resolve(data));
-    req.on('error', reject);
+    let bytes = 0;
+
+    const timeout = setTimeout(() => {
+      req.destroy();
+      reject(new Error('Request body timeout'));
+    }, timeoutMs);
+
+    req.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > maxBytes) {
+        clearTimeout(timeout);
+        req.destroy();
+        reject(new Error('Payload too large'));
+        return;
+      }
+      data += chunk.toString();
+    });
+    req.on('end', () => {
+      clearTimeout(timeout);
+      resolve(data);
+    });
+    req.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
   });
 }
 
-export function startBridgeServer(chatPanel: ChatPanel): http.Server {
-  const port = vscode.workspace
-    .getConfiguration('weaver')
-    .get<number>('bridgePort', 8765);
+function isLoopback(remoteAddress?: string): boolean {
+  if (!remoteAddress) { return false; }
+  return remoteAddress === '127.0.0.1' || remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1';
+}
+
+export function startBridgeServer(applyService: ApplyService): http.Server {
+  const cfg = vscode.workspace.getConfiguration('weaver');
+  const port = cfg.get<number>('bridgePort', 8765);
+  const maxBodyBytes = cfg.get<number>('bridgeMaxBodyBytes', 512_000);
+  const requestTimeoutMs = cfg.get<number>('bridgeRequestTimeoutMs', 10_000);
 
   const server = http.createServer(async (req, res) => {
+    if (!isLoopback(req.socket.remoteAddress)) {
+      json(res, 403, { ok: false, error: 'Forbidden' });
+      return;
+    }
+
     // CORS preflight
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
@@ -40,11 +73,16 @@ export function startBridgeServer(chatPanel: ChatPanel): http.Server {
       return;
     }
 
-    const url = req.url ?? '/';
+    const url = (req.url ?? '/').split('?')[0];
+
+    if (req.method === 'GET' && url === '/health') {
+      json(res, 200, { ok: true });
+      return;
+    }
 
     // GET /context — return active editor info
     if (req.method === 'GET' && url === '/context') {
-      const editor = chatPanel.activeEditor;
+      const editor = applyService.activeEditor;
       if (!editor) {
         json(res, 200, { available: false });
         return;
@@ -63,8 +101,13 @@ export function startBridgeServer(chatPanel: ChatPanel): http.Server {
     if (req.method === 'POST' && url === '/apply') {
       let body: { code?: string; language?: string };
       try {
-        body = JSON.parse(await readBody(req));
-      } catch {
+        body = JSON.parse(await readBody(req, maxBodyBytes, requestTimeoutMs));
+      } catch (err) {
+        if (err instanceof Error && (err.message === 'Payload too large' || err.message === 'Request body timeout')) {
+          const status = err.message === 'Payload too large' ? 413 : 408;
+          json(res, status, { ok: false, error: err.message });
+          return;
+        }
         json(res, 400, { ok: false, error: 'Invalid JSON' });
         return;
       }
@@ -77,17 +120,17 @@ export function startBridgeServer(chatPanel: ChatPanel): http.Server {
         return;
       }
 
-      if (!chatPanel.activeEditor) {
-        json(res, 200, { ok: false, error: 'No active editor — open a file in VS Code first' });
+      if (!applyService.activeEditor) {
+        json(res, 409, { ok: false, error: 'No active editor — open a file in VS Code first' });
         return;
       }
 
       try {
-        await chatPanel.applyCode(code, language);
+        await applyService.applyCode(code, language);
         json(res, 200, { ok: true });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        json(res, 200, { ok: false, error: msg });
+        json(res, 500, { ok: false, error: msg });
       }
       return;
     }
@@ -99,6 +142,9 @@ export function startBridgeServer(chatPanel: ChatPanel): http.Server {
     console.log(`[Weaver] Bridge server listening on http://127.0.0.1:${port}`);
   });
 
+  server.headersTimeout = Math.max(requestTimeoutMs + 1000, 5000);
+  server.requestTimeout = requestTimeoutMs;
+
   server.on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {
       vscode.window.showWarningMessage(
@@ -108,6 +154,10 @@ export function startBridgeServer(chatPanel: ChatPanel): http.Server {
     } else {
       console.error('[Weaver] Bridge server error:', err);
     }
+  });
+
+  server.on('clientError', (err) => {
+    console.error('[Weaver] Bridge client error:', err.message);
   });
 
   return server;

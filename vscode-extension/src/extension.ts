@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ApiDocsView } from './panel';
-import { ChatPanel }   from './chatPanel';
+import { ApplyService } from './applyService';
 import { extractContext } from './contextExtractor';
 import { search } from './searchClient';
 import { InlineCompletionProvider } from './inlineCompletionProvider';
@@ -13,14 +13,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(ApiDocsView.viewType, docsView)
   );
 
-  // ── Chat panel (right, opens on command) ────────────────────────────────
-  const chatPanel = ChatPanel.getInstance(context.extensionUri, context);
-  context.subscriptions.push(
-    vscode.commands.registerCommand('weaver.openChat', () => chatPanel.open())
-  );
+  // ── Apply service (tracks active editor, handles code apply from desktop) ─
+  const applyService = new ApplyService(context);
 
   // ── Desktop panel bridge server ──────────────────────────────────────────
-  const bridgeServer = startBridgeServer(chatPanel);
+  const bridgeServer = startBridgeServer(applyService);
   context.subscriptions.push({ dispose: () => bridgeServer.close() });
 
   // ── Inline completion provider ───────────────────────────────────────────
@@ -34,6 +31,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // ── Auto-search on cursor move → update sidebar docs view ───────────────
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let searchSeq = 0;
+  let lastSearchKey = '';
 
   const triggerSearch = (): void => {
     const editor = vscode.window.activeTextEditor;
@@ -48,6 +47,12 @@ export function activate(context: vscode.ExtensionContext): void {
       const ctx = extractContext(editor);
       if (!ctx) { return; }
 
+      const key = `${editor.document.uri.toString()}::${editor.selection.active.line}::${ctx.query}`;
+      if (key === lastSearchKey) { return; }
+      lastSearchKey = key;
+
+      const currentSeq = ++searchSeq;
+
       const backendUrl = vscode.workspace
         .getConfiguration('weaver')
         .get<string>('backendUrl', 'http://localhost:8000');
@@ -56,8 +61,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
       try {
         const response = await search(backendUrl, ctx.query);
+        if (currentSeq !== searchSeq) { return; }
         docsView.showResults(response.results, ctx.query);
       } catch (err: unknown) {
+        if (currentSeq !== searchSeq) { return; }
         const msg = err instanceof Error ? err.message : String(err);
         docsView.showError(`Backend unreachable — ${msg}`);
       }
@@ -71,4 +78,3 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {}
-

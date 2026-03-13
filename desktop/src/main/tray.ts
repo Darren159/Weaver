@@ -5,7 +5,7 @@ export function createTray(win: BrowserWindow, onQuit: () => void): Tray {
   const tray = new Tray(createWeaverIcon());
   tray.setToolTip('Weaver');
 
-  let alwaysOnTop = true;
+  let alwaysOnTop = win.isAlwaysOnTop();
 
   const buildMenu = () => Menu.buildFromTemplate([
     {
@@ -31,9 +31,12 @@ export function createTray(win: BrowserWindow, onQuit: () => void): Tray {
   tray.on('click', () => toggle());
 
   function toggle() {
-    if (win.isVisible() && win.isFocused()) {
+    if (win.isVisible() && !win.isMinimized() && win.isFocused()) {
       win.hide();
     } else {
+      if (win.isMinimized()) {
+        win.restore();
+      }
       win.show();
       win.focus();
     }

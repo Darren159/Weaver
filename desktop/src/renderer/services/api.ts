@@ -230,3 +230,39 @@ export async function streamComplete(
   if (!response.ok) throw new Error(await parseError(response));
   await consumeSSE(response, onToken, signal);
 }
+
+// ── Google Docs bridge ────────────────────────────────────────────────────────
+
+export type GdocsContext = {
+  available: boolean;
+  docTitle?: string;
+  prefix?: string;
+  suffix?: string;
+  updatedAt?: number;
+};
+
+export async function getGdocsContext(): Promise<GdocsContext> {
+  try {
+    const base = await getBase();
+    const response = await fetch(`${base}/api/gdocs/context`);
+    if (!response.ok) return { available: false };
+    return (await response.json()) as GdocsContext;
+  } catch {
+    return { available: false };
+  }
+}
+
+export async function insertInGdocs(text: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const base = await getBase();
+    const response = await fetch(`${base}/api/gdocs/insert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!response.ok) return { ok: false, error: await parseError(response) };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Insert failed' };
+  }
+}

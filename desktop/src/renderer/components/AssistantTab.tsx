@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { ChatMessage, SearchIndex, SearchResult, searchDocs, streamChat, streamComplete } from '../services/api';
+import { ChatMessage, GdocsContext, SearchIndex, SearchResult, getGdocsContext, insertInGdocs, searchDocs, streamChat } from '../services/api';
 import { VscContext, applyInVscode, getVscContext } from '../services/vscBridge';
 import { CodeBlock } from './CodeBlock';
 
@@ -29,17 +29,19 @@ function MessageContent({
   text,
   streaming,
   onApply,
+  applyLabel,
 }: {
   text: string;
   streaming: boolean;
   onApply?: (code: string, language: string) => Promise<void>;
+  applyLabel?: string;
 }) {
   const parts = parseMarkdown(text);
   return (
     <>
       {parts.map((p, i) =>
         p.type === 'code' ? (
-          <CodeBlock key={i} code={p.content} language={p.language ?? ''} onApply={onApply} />
+          <CodeBlock key={i} code={p.content} language={p.language ?? ''} onApply={onApply} applyLabel={applyLabel} />
         ) : (
           <span key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             {p.content}
@@ -271,100 +273,164 @@ function VSCodePanel() {
 // ── Google Docs panel ─────────────────────────────────────────────────────────
 
 function GoogleDocsPanel() {
-  const completionIndex: SearchIndex = 'drive-docs';
-  const [prefix, setPrefix] = useState('');
-  const [suffix, setSuffix] = useState('');
-  const [completion, setCompletion] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const chatIndex: SearchIndex = 'drive-docs';
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatStreaming, setIsChatStreaming] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const [gdocsCtx, setGdocsCtx] = useState<GdocsContext>({ available: false });
+  const [includeContext, setIncludeContext] = useState(true);
+  const chatAbortRef = useRef<AbortController | null>(null);
   const accRef = useRef('');
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const handleComplete = async (e: FormEvent) => {
+  // Poll Google Docs context every 3s via backend relay
+  useEffect(() => {
+    const refresh = () => getGdocsContext().then(setGdocsCtx);
+    refresh();
+    const id = setInterval(refresh, 3000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Connected = sidebar posted context within the last 15s
+  const isConnected = gdocsCtx.available &&
+    gdocsCtx.updatedAt !== undefined &&
+    Date.now() / 1000 - gdocsCtx.updatedAt < 15;
+
+  const handleInsert = async (text: string, _language: string): Promise<void> => {
+    const result = await insertInGdocs(text);
+    if (!result.ok) throw new Error(result.error ?? 'Insert failed');
+  };
+
+  const handleChat = async (e: FormEvent) => {
     e.preventDefault();
-    if (!prefix.trim() || isStreaming) return;
-    setCompletion('');
-    setError('');
-    setCopied(false);
-    setIsStreaming(true);
+    const text = chatInput.trim();
+    if (!text || isChatStreaming) return;
+
+    const fileContext = includeContext && isConnected ? (gdocsCtx.prefix ?? '') : '';
+    const fileName    = includeContext && isConnected ? (gdocsCtx.docTitle ?? '') : '';
+
+    const userMsg: ChatMessage = { role: 'user', content: text };
+    const newHistory = [...messages, userMsg];
+    setMessages([...newHistory, { role: 'assistant', content: '' }]);
+    setChatInput('');
+    setChatError('');
+    setIsChatStreaming(true);
     accRef.current = '';
 
-    abortRef.current = new AbortController();
+    chatAbortRef.current = new AbortController();
     try {
-      await streamComplete(
-        { prefix, suffix, language: 'google-docs', index: completionIndex },
+      await streamChat(
+        newHistory,
+        fileContext,
+        fileName,
         (token) => {
           accRef.current += token;
-          setCompletion(accRef.current);
+          setMessages([...newHistory, { role: 'assistant', content: accRef.current }]);
         },
-        abortRef.current.signal,
+        chatIndex,
+        chatAbortRef.current.signal,
       );
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
-        setError(err instanceof Error ? err.message : 'Completion failed.');
+        setChatError(err instanceof Error ? err.message : 'Chat failed.');
+        setMessages(newHistory);
       }
     } finally {
-      setIsStreaming(false);
-      abortRef.current = null;
+      setIsChatStreaming(false);
+      chatAbortRef.current = null;
     }
   };
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(completion);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   return (
-    <section className="panel fade-in">
-      <h2>Google Docs Completion</h2>
-      <form className="form-grid" onSubmit={handleComplete}>
-        <label>
-          Text before cursor
-          <textarea
-            className="context-area"
-            value={prefix}
-            onChange={(e) => setPrefix(e.target.value)}
-            placeholder="Paste the text before your cursor position…"
-            rows={6}
-          />
-        </label>
-        <label>
-          Text after cursor (optional)
-          <textarea
-            className="context-area"
-            value={suffix}
-            onChange={(e) => setSuffix(e.target.value)}
-            placeholder="Paste the text after your cursor position…"
-            rows={3}
-          />
-        </label>
-        <div className="actions">
-          {isStreaming ? (
-            <button type="button" onClick={() => abortRef.current?.abort()}>Stop</button>
-          ) : (
-            <button type="submit" className="primary" disabled={!prefix.trim()}>
-              Get Completion
+    <div className="assistant-layout">
+      {/* Google Docs status bar */}
+      <div className={`vsc-status ${isConnected ? 'connected' : 'disconnected'}`}>
+        {isConnected ? (
+          <>
+            <span className="vsc-dot" />
+            <span>Google Docs: <strong>{gdocsCtx.docTitle}</strong></span>
+            <label className="ctx-toggle">
+              <input
+                type="checkbox"
+                checked={includeContext}
+                onChange={(e) => setIncludeContext(e.target.checked)}
+              />
+              Include doc context
+            </label>
+          </>
+        ) : (
+          <>
+            <span className="vsc-dot off" />
+            <span>Not connected — open the Weaver sidebar in Google Docs</span>
+          </>
+        )}
+      </div>
+
+      {/* Chat */}
+      <section className="panel fade-in">
+        <div className="chat-header">
+          <h2>Chat</h2>
+          {messages.length > 0 && (
+            <button
+              type="button"
+              className="auth-disconnect"
+              onClick={() => { chatAbortRef.current?.abort(); setMessages([]); setChatError(''); }}
+            >
+              Clear
             </button>
           )}
         </div>
-      </form>
-      {error ? <p className="error" style={{ marginTop: 10 }}>{error}</p> : null}
-      {completion ? (
-        <div className="completion-wrap">
-          <div className="completion-box">
-            {completion}
-            {isStreaming ? <span className="cursor-blink">▌</span> : null}
+
+        {messages.length > 0 ? (
+          <div className="chat-history">
+            {messages.map((m, i) => (
+              <div key={i} className={`chat-msg ${m.role}`}>
+                <span className="chat-role">{m.role === 'user' ? 'You' : 'Weaver'}</span>
+                <div className="chat-content">
+                  {m.role === 'assistant' ? (
+                    <MessageContent
+                      text={m.content}
+                      streaming={isChatStreaming && i === messages.length - 1}
+                      onApply={isConnected ? handleInsert : undefined}
+                      applyLabel="Insert in Doc"
+                    />
+                  ) : (
+                    <span style={{ whiteSpace: 'pre-wrap' }}>{m.content}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div ref={chatEndRef} />
           </div>
-          {!isStreaming && (
-            <button type="button" className="copy-btn" onClick={handleCopy}>
-              {copied ? 'Copied!' : 'Copy to clipboard'}
-            </button>
+        ) : (
+          <p className="placeholder" style={{ margin: '12px 0' }}>
+            Ask anything about your document or knowledge base.
+          </p>
+        )}
+
+        {chatError ? <p className="error">{chatError}</p> : null}
+
+        <form className="chat-input-row" onSubmit={handleChat}>
+          <input
+            type="text"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            placeholder="Ask a question…"
+            disabled={isChatStreaming}
+          />
+          {isChatStreaming ? (
+            <button type="button" onClick={() => chatAbortRef.current?.abort()}>Stop</button>
+          ) : (
+            <button type="submit" className="primary" disabled={!chatInput.trim()}>Send</button>
           )}
-        </div>
-      ) : null}
-    </section>
+        </form>
+      </section>
+    </div>
   );
 }
 

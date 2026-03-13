@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, shell, Tray } from 'electron';
 import * as path from 'path';
 import { createTray } from './tray';
 
 const PANEL_WIDTH = 440;
 let win: BrowserWindow | null = null;
+let tray: Tray | null = null;
 let quitting = false;
 
 function createWindow(): BrowserWindow {
@@ -17,8 +18,9 @@ function createWindow(): BrowserWindow {
     frame: false,
     transparent: false,
     resizable: true,
-    skipTaskbar: true,
-    alwaysOnTop: true,
+    minimizable: true,
+    skipTaskbar: false,
+    alwaysOnTop: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -57,7 +59,8 @@ app.whenReady().then(() => {
   }
 
   win = createWindow();
-  createTray(win, () => { quitting = true; app.quit(); });
+  // Keep a strong reference or Electron can GC the tray on Windows.
+  tray = createTray(win, () => { quitting = true; app.quit(); });
 
   // Show the panel on first launch
   win.once('ready-to-show', () => win?.show());
@@ -73,6 +76,7 @@ app.on('window-all-closed', (e: Event) => {
 // ── IPC handlers ─────────────────────────────────────────────────────────────
 
 ipcMain.on('hide-window', () => win?.hide());
+ipcMain.on('minimize-window', () => win?.minimize());
 
 ipcMain.handle('get-config', () => ({
   bridgePort: Number(process.env.WEAVER_BRIDGE_PORT ?? 8765),

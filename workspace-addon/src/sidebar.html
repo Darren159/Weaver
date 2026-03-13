@@ -291,6 +291,7 @@
 
     function startPolling() {
       setTimeout(poll, POLL_MS);
+      setTimeout(checkPendingInsert, 2000);
     }
 
     function poll() {
@@ -309,6 +310,7 @@
             // First poll — just record, don't trigger yet
             lastPolledPrefix = prefix;
             prefixChangedAt  = Date.now();
+            postContextToBackend(ctx);
           } else if (prefix !== lastPolledPrefix) {
             // Text changed — abort any running stream, dismiss suggestion
             lastPolledPrefix = prefix;
@@ -317,6 +319,7 @@
             hideSuggestion();
             setStatus('complete-status', '');
             scheduleSearch(prefix.slice(-200).trim());
+            postContextToBackend(ctx);
           } else if (
             autoEnabled &&
             prefixChangedAt > 0 &&
@@ -548,6 +551,35 @@
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
+    }
+
+    // ── Desktop panel bridge ───────────────────────────────────────────────────
+
+    function postContextToBackend(ctx) {
+      fetch(backendUrl + '/api/gdocs/context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          docTitle: ctx.documentTitle || '',
+          prefix:   ctx.prefix,
+          suffix:   ctx.suffix,
+        }),
+      }).catch(function() {}); // silent — backend may be offline
+    }
+
+    function checkPendingInsert() {
+      fetch(backendUrl + '/api/gdocs/pending-insert')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.pending && data.text) {
+            google.script.run
+              .withSuccessHandler(function() {})
+              .withFailureHandler(function() {})
+              .insertAtCursor(data.text);
+          }
+        })
+        .catch(function() {})
+        .finally(function() { setTimeout(checkPendingInsert, 2000); });
     }
   </script>
 </body>

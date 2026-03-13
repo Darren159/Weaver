@@ -28,28 +28,9 @@
         }
       ]
     },
-    "commands": [
-      {
-        "command": "weaver.openChat",
-        "title": "Weaver: Open Chat",
-        "icon": "$(comment-discussion)"
-      }
-    ],
-    "keybindings": [
-      {
-        "command": "weaver.openChat",
-        "key": "ctrl+shift+k",
-        "mac": "cmd+shift+k"
-      }
-    ],
-    "menus": {
-      "editor/title": [
-        {
-          "command": "weaver.openChat",
-          "group": "navigation"
-        }
-      ]
-    },
+    "commands": [],
+    "keybindings": [],
+    "menus": {},
     "configuration": {
       "title": "Weaver",
       "properties": {
@@ -67,6 +48,16 @@
           "type": "number",
           "default": 8765,
           "description": "Port for the Weaver desktop panel bridge server (used to apply code edits from the floating panel)"
+        },
+        "weaver.bridgeMaxBodyBytes": {
+          "type": "number",
+          "default": 512000,
+          "description": "Maximum request size in bytes accepted by the local bridge server"
+        },
+        "weaver.bridgeRequestTimeoutMs": {
+          "type": "number",
+          "default": 10000,
+          "description": "Timeout in milliseconds for bridge server requests"
         }
       }
     }

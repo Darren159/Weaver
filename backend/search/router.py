@@ -1,4 +1,5 @@
 import json
+import time
 import httpx
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -318,3 +319,52 @@ async def chat(request: Request):
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(token_stream(), media_type="text/event-stream")
+
+
+# ── Google Docs bridge relay ───────────────────────────────────────────────────
+# In-memory relay between the Google Docs sidebar and the desktop panel.
+# No persistence — state resets on backend restart.
+
+_gdocs_context: dict | None = None   # last cursor context posted by sidebar
+_gdocs_pending: str | None  = None   # text queued for insertion by desktop panel
+
+
+@router.post("/gdocs/context")
+async def gdocs_post_context(request: Request):
+    global _gdocs_context
+    body = await request.json()
+    _gdocs_context = {
+        "docTitle": body.get("docTitle", ""),
+        "prefix":   body.get("prefix", ""),
+        "suffix":   body.get("suffix", ""),
+        "updatedAt": time.time(),
+    }
+    return {"ok": True}
+
+
+@router.get("/gdocs/context")
+async def gdocs_get_context():
+    if _gdocs_context is None:
+        return {"available": False}
+    return {"available": True, **_gdocs_context}
+
+
+@router.post("/gdocs/insert")
+async def gdocs_post_insert(request: Request):
+    global _gdocs_pending
+    body = await request.json()
+    text = body.get("text", "")
+    if not text:
+        return JSONResponse({"error": "text is required"}, status_code=400)
+    _gdocs_pending = text
+    return {"ok": True}
+
+
+@router.get("/gdocs/pending-insert")
+async def gdocs_get_pending_insert():
+    global _gdocs_pending
+    text = _gdocs_pending
+    if text is None:
+        return {"pending": False}
+    _gdocs_pending = None   # claim and clear atomically
+    return {"pending": True, "text": text}

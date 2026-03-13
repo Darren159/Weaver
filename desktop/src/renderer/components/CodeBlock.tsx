@@ -4,9 +4,10 @@ interface CodeBlockProps {
   code: string;
   language: string;
   onApply?: (code: string, language: string) => Promise<void>;
+  applyLabel?: string;
 }
 
-export function CodeBlock({ code, language, onApply }: CodeBlockProps) {
+export function CodeBlock({ code, language, onApply, applyLabel = 'Apply in VS Code' }: CodeBlockProps) {
   const [applyState, setApplyState] = useState<'idle' | 'applying' | 'ok' | 'err'>('idle');
   const [applyError, setApplyError] = useState('');
 
@@ -36,7 +37,7 @@ export function CodeBlock({ code, language, onApply }: CodeBlockProps) {
             onClick={handleApply}
             disabled={applyState === 'applying'}
           >
-            {applyState === 'idle' && 'Apply in VS Code'}
+            {applyState === 'idle' && applyLabel}
             {applyState === 'applying' && 'Applying…'}
             {applyState === 'ok' && 'Applied!'}
             {applyState === 'err' && (applyError || 'Failed')}
