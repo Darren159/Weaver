@@ -220,6 +220,7 @@ async def chat(request: Request):
     messages: list = body.get("messages", [])
     file_context: str = body.get("fileContext", "")
     file_name: str = body.get("fileName", "")
+    agent_instructions: str = body.get("agentInstructions", "")
 
     if not messages:
         return JSONResponse({"error": "messages is required"}, status_code=400)
@@ -267,11 +268,13 @@ async def chat(request: Request):
             print(f"[chat] RAG search error: {e}")
 
     system_parts = [
-        "You are a helpful coding assistant integrated into a VS Code editor. "
-        "Answer the user's question clearly and concisely. "
-        "When you suggest code modifications, always wrap them in a fenced code block "
-        "with the language identifier. For example:\n```python\n...\n```\n"
-        "The user can click 'Apply' on any code block to apply it directly to their file.",
+        agent_instructions if agent_instructions else (
+            "You are a helpful coding assistant integrated into a VS Code editor. "
+            "Answer the user's question clearly and concisely. "
+            "When you suggest code modifications, always wrap them in a fenced code block "
+            "with the language identifier. For example:\n```python\n...\n```\n"
+            "The user can click 'Apply' on any code block to apply it directly to their file."
+        ),
     ]
     if file_name:
         system_parts.append(f"The user is currently editing: {file_name}")

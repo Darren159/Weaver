@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { ChatMessage, GdocsContext, SearchIndex, SearchResult, getGdocsContext, insertInGdocs, searchDocs, streamChat } from '../services/api';
+import { AgentRecord, BEDROCK_MODELS, ChatMessage, GdocsContext, SearchIndex, SearchResult, getActiveModel, getGdocsContext, insertInGdocs, listAgents, searchDocs, setActiveModel, streamChat, streamComplete } from '../services/api';
 import { VscContext, applyInVscode, getVscContext } from '../services/vscBridge';
 import { CodeBlock } from './CodeBlock';
 
@@ -55,7 +55,7 @@ function MessageContent({
 
 // ── VS Code panel ─────────────────────────────────────────────────────────────
 
-function VSCodePanel() {
+function VSCodePanel({ agentInstructions }: { agentInstructions: string }) {
   const searchIndex: SearchIndex = 'github-docs';
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
@@ -134,6 +134,7 @@ function VSCodePanel() {
         },
         searchIndex,
         chatAbortRef.current.signal,
+        agentInstructions || undefined,
       );
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -272,16 +273,27 @@ function VSCodePanel() {
 
 // ── Google Docs panel ─────────────────────────────────────────────────────────
 
-function GoogleDocsPanel() {
+function GoogleDocsPanel({ agentInstructions }: { agentInstructions: string }) {
   const chatIndex: SearchIndex = 'drive-docs';
+
+  // ── Shared context ──────────────────────────────────────────────────────────
+  const [gdocsCtx, setGdocsCtx] = useState<GdocsContext>({ available: false });
+  const [includeContext, setIncludeContext] = useState(true);
+
+  // ── Completion ──────────────────────────────────────────────────────────────
+  const [completion, setCompletion] = useState('');
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [completeError, setCompleteError] = useState('');
+  const completeAbortRef = useRef<AbortController | null>(null);
+  const completeAccRef = useRef('');
+
+  // ── Chat ────────────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isChatStreaming, setIsChatStreaming] = useState(false);
   const [chatError, setChatError] = useState('');
-  const [gdocsCtx, setGdocsCtx] = useState<GdocsContext>({ available: false });
-  const [includeContext, setIncludeContext] = useState(true);
   const chatAbortRef = useRef<AbortController | null>(null);
-  const accRef = useRef('');
+  const chatAccRef = useRef('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Poll Google Docs context every 3s via backend relay
@@ -300,6 +312,43 @@ function GoogleDocsPanel() {
   const isConnected = gdocsCtx.available &&
     gdocsCtx.updatedAt !== undefined &&
     Date.now() / 1000 - gdocsCtx.updatedAt < 15;
+
+  // ── Completion handlers ─────────────────────────────────────────────────────
+
+  const handleComplete = async () => {
+    if (isCompleting || !isConnected) return;
+    setCompletion('');
+    setCompleteError('');
+    setIsCompleting(true);
+    completeAccRef.current = '';
+
+    completeAbortRef.current = new AbortController();
+    try {
+      await streamComplete(
+        { prefix: gdocsCtx.prefix ?? '', suffix: gdocsCtx.suffix ?? '', language: 'google-docs', index: chatIndex },
+        (token) => {
+          completeAccRef.current += token;
+          setCompletion(completeAccRef.current);
+        },
+        completeAbortRef.current.signal,
+      );
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setCompleteError(err instanceof Error ? err.message : 'Completion failed.');
+      }
+    } finally {
+      setIsCompleting(false);
+      completeAbortRef.current = null;
+    }
+  };
+
+  const handleInsertCompletion = async (): Promise<void> => {
+    const result = await insertInGdocs(completion);
+    if (!result.ok) throw new Error(result.error ?? 'Insert failed');
+    setCompletion('');
+  };
+
+  // ── Chat handlers ───────────────────────────────────────────────────────────
 
   const handleInsert = async (text: string, _language: string): Promise<void> => {
     const result = await insertInGdocs(text);
@@ -320,7 +369,7 @@ function GoogleDocsPanel() {
     setChatInput('');
     setChatError('');
     setIsChatStreaming(true);
-    accRef.current = '';
+    chatAccRef.current = '';
 
     chatAbortRef.current = new AbortController();
     try {
@@ -329,11 +378,12 @@ function GoogleDocsPanel() {
         fileContext,
         fileName,
         (token) => {
-          accRef.current += token;
-          setMessages([...newHistory, { role: 'assistant', content: accRef.current }]);
+          chatAccRef.current += token;
+          setMessages([...newHistory, { role: 'assistant', content: chatAccRef.current }]);
         },
         chatIndex,
         chatAbortRef.current.signal,
+        agentInstructions || undefined,
       );
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -370,6 +420,39 @@ function GoogleDocsPanel() {
           </>
         )}
       </div>
+
+      {/* Completion */}
+      <section className="panel fade-in">
+        <h2>Completion</h2>
+        <div className="actions">
+          {isCompleting ? (
+            <button type="button" onClick={() => completeAbortRef.current?.abort()}>Stop</button>
+          ) : (
+            <button
+              type="button"
+              className="primary"
+              disabled={!isConnected}
+              onClick={handleComplete}
+            >
+              {isConnected ? 'Complete at cursor' : 'Not connected'}
+            </button>
+          )}
+        </div>
+        {completeError ? <p className="error" style={{ marginTop: 8 }}>{completeError}</p> : null}
+        {completion ? (
+          <div className="completion-wrap">
+            <div className="completion-box">
+              {completion}
+              {isCompleting ? <span className="cursor-blink">▌</span> : null}
+            </div>
+            {!isCompleting && (
+              <button type="button" className="primary" style={{ marginTop: 8 }} onClick={handleInsertCompletion}>
+                Insert in Doc
+              </button>
+            )}
+          </div>
+        ) : null}
+      </section>
 
       {/* Chat */}
       <section className="panel fade-in">
@@ -440,6 +523,21 @@ type AssistantApp = 'vscode' | 'googledocs';
 
 export function AssistantTab() {
   const [app, setApp] = useState<AssistantApp>('vscode');
+  const [activeModelId, setActiveModelIdState] = useState(BEDROCK_MODELS[0].id);
+  const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState('');
+
+  useEffect(() => {
+    getActiveModel().then(setActiveModelIdState);
+    listAgents().then(setAgents);
+  }, []);
+
+  const handleModelChange = (id: string) => {
+    setActiveModelIdState(id);
+    setActiveModel(id);
+  };
+
+  const agentInstructions = agents.find(a => a.id === selectedAgentId)?.config.system_instructions ?? '';
 
   return (
     <>
@@ -455,7 +553,38 @@ export function AssistantTab() {
           <option value="googledocs">Google Docs</option>
         </select>
       </section>
-      {app === 'vscode' ? <VSCodePanel /> : <GoogleDocsPanel />}
+
+      <section className="config-bar">
+        <label className="config-bar-label">
+          Model
+          <select
+            className="config-bar-select"
+            value={activeModelId}
+            onChange={(e) => handleModelChange(e.target.value)}
+          >
+            {BEDROCK_MODELS.map(m => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="config-bar-label">
+          Agent
+          <select
+            className="config-bar-select"
+            value={selectedAgentId}
+            onChange={(e) => setSelectedAgentId(e.target.value)}
+          >
+            <option value="">Default</option>
+            {agents.map(a => (
+              <option key={a.id} value={a.id}>{a.config.name}</option>
+            ))}
+          </select>
+        </label>
+      </section>
+
+      {app === 'vscode'
+        ? <VSCodePanel agentInstructions={agentInstructions} />
+        : <GoogleDocsPanel agentInstructions={agentInstructions} />}
     </>
   );
 }

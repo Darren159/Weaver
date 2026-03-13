@@ -37,9 +37,6 @@
       cursor: pointer;
       transition: background 0.15s;
     }
-    .btn-primary { background: #1a73e8; color: #fff; font-weight: 500; }
-    .btn-primary:hover { background: #1765cc; }
-    .btn-primary:disabled { background: #a8c7fa; cursor: default; }
     .btn-secondary {
       background: #fff;
       color: #1a73e8;
@@ -48,8 +45,6 @@
     }
     .btn-secondary:hover { background: #f1f3f4; }
     .btn-secondary:disabled { color: #aaa; border-color: #eee; cursor: default; }
-    .btn-row { display: flex; gap: 8px; margin-top: 8px; }
-    .btn-row button { margin-top: 0; }
 
     /* Sections */
     .section { margin-top: 14px; }
@@ -62,23 +57,6 @@
       margin-bottom: 6px;
     }
     hr { border: none; border-top: 1px solid #f1f3f4; margin: 14px 0; }
-
-    /* Suggestion box */
-    #suggestion-box {
-      display: none;
-      background: #f8f9fa;
-      border: 1px solid #dadce0;
-      border-radius: 6px;
-      padding: 10px;
-      margin-top: 10px;
-      white-space: pre-wrap;
-      word-break: break-word;
-      line-height: 1.5;
-      max-height: 200px;
-      overflow-y: auto;
-      color: #1a73e8;
-      font-size: 13px;
-    }
 
     /* Status */
     .status {
@@ -135,54 +113,6 @@
     }
     input[type="text"]:focus { border-color: #1a73e8; }
     .index-status { font-size: 11px; color: #5f6368; margin-top: 6px; min-height: 15px; }
-
-    /* Auto toggle */
-    .auto-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 10px;
-    }
-    .auto-label { font-size: 12px; color: #5f6368; }
-    .toggle {
-      position: relative;
-      width: 36px;
-      height: 20px;
-      flex-shrink: 0;
-    }
-    .toggle input { opacity: 0; width: 0; height: 0; }
-    .toggle-track {
-      position: absolute;
-      inset: 0;
-      background: #dadce0;
-      border-radius: 20px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    .toggle input:checked + .toggle-track { background: #1a73e8; }
-    .toggle-track::before {
-      content: '';
-      position: absolute;
-      width: 14px;
-      height: 14px;
-      left: 3px;
-      top: 3px;
-      background: #fff;
-      border-radius: 50%;
-      transition: transform 0.2s;
-    }
-    .toggle input:checked + .toggle-track::before { transform: translateX(16px); }
-
-    /* Insert button — big and prominent when suggestion is ready */
-    #insert-btn {
-      margin-top: 8px;
-      background: #34a853;
-      color: #fff;
-      font-size: 14px;
-      font-weight: 600;
-      padding: 10px;
-    }
-    #insert-btn:hover { background: #2d9144; }
   </style>
 </head>
 <body>
@@ -190,27 +120,7 @@
   <div class="header">
     <h1>Weaver</h1>
     <div class="doc-title" id="doc-title">Loading…</div>
-    <div class="auto-row">
-      <span class="auto-label">Auto-complete</span>
-      <label class="toggle">
-        <input type="checkbox" id="auto-toggle" checked onchange="onAutoToggle(this.checked)">
-        <span class="toggle-track"></span>
-      </label>
-    </div>
   </div>
-
-  <!-- Completion -->
-  <div class="section">
-    <button class="btn-primary" id="complete-btn" onclick="onComplete()">Get Completion</button>
-    <div id="suggestion-box"></div>
-    <div class="btn-row" id="action-row" style="display:none">
-      <button id="insert-btn" class="btn-primary" onclick="onInsert()">&#9166; Insert</button>
-      <button class="btn-secondary" onclick="onDismiss()">Dismiss</button>
-    </div>
-    <div class="status" id="complete-status"></div>
-  </div>
-
-  <hr>
 
   <!-- Related docs -->
   <div class="section">
@@ -239,19 +149,12 @@
   <script>
     // ── State ──────────────────────────────────────────────────────────────────
 
-    var backendUrl    = 'http://localhost:8000';
-    var suggestion    = '';
-    var abortCtrl     = null;
-    var searchTimeout = null;
-    var lastQuery     = '';
-
-    // Auto-trigger polling state
-    var autoEnabled      = true;
+    var backendUrl       = 'http://localhost:8000';
+    var searchTimeout    = null;
+    var lastQuery        = '';
     var pollInFlight     = false;
-    var lastPolledPrefix = null;  // null = not yet polled
-    var prefixChangedAt  = 0;     // timestamp of last prefix change
-    var QUIET_MS         = 1500;  // ms without change before triggering
-    var POLL_MS          = 800;   // ms between polls
+    var lastPolledPrefix = null;
+    var POLL_MS          = 1500;
 
     // ── Init ───────────────────────────────────────────────────────────────────
 
@@ -269,25 +172,14 @@
         .withSuccessHandler(function(ctx) {
           document.getElementById('doc-title').textContent = ctx.documentTitle || '';
           scheduleSearch(ctx.prefix.slice(-200).trim());
+          postContextToBackend(ctx);
         })
         .getCursorContext();
     }
 
-    function onAutoToggle(enabled) {
-      autoEnabled = enabled;
-      if (!enabled) {
-        if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
-        hideSuggestion();
-        setStatus('complete-status', 'Auto-complete off.');
-      } else {
-        setStatus('complete-status', '');
-        prefixChangedAt = Date.now(); // reset so it triggers fresh
-      }
-    }
-
-    // ── Auto-trigger polling ───────────────────────────────────────────────────
-    // Polls getCursorContext() every POLL_MS ms.
-    // When prefix stabilises for QUIET_MS ms, fires a completion automatically.
+    // ── Context polling ────────────────────────────────────────────────────────
+    // Keeps the desktop panel relay current and triggers related-docs search
+    // whenever the document text changes.
 
     function startPolling() {
       setTimeout(poll, POLL_MS);
@@ -306,32 +198,10 @@
           pollInFlight = false;
           var prefix = ctx.prefix;
 
-          if (lastPolledPrefix === null) {
-            // First poll — just record, don't trigger yet
+          if (lastPolledPrefix === null || prefix !== lastPolledPrefix) {
             lastPolledPrefix = prefix;
-            prefixChangedAt  = Date.now();
-            postContextToBackend(ctx);
-          } else if (prefix !== lastPolledPrefix) {
-            // Text changed — abort any running stream, dismiss suggestion
-            lastPolledPrefix = prefix;
-            prefixChangedAt  = Date.now();
-            if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
-            hideSuggestion();
-            setStatus('complete-status', '');
             scheduleSearch(prefix.slice(-200).trim());
             postContextToBackend(ctx);
-          } else if (
-            autoEnabled &&
-            prefixChangedAt > 0 &&
-            !abortCtrl &&
-            !suggestion &&
-            Date.now() - prefixChangedAt >= QUIET_MS
-          ) {
-            // Prefix stable long enough and no active stream — auto-trigger
-            prefixChangedAt = 0; // prevent re-triggering for same position
-            setStatus('complete-status', 'Auto-completing…');
-            document.getElementById('complete-btn').disabled = true;
-            startStream(ctx);
           }
 
           setTimeout(poll, POLL_MS);
@@ -341,139 +211,6 @@
           setTimeout(poll, POLL_MS * 2);
         })
         .getCursorContext();
-    }
-
-    // ── Completion ─────────────────────────────────────────────────────────────
-
-    function onComplete() {
-      setStatus('complete-status', 'Getting cursor context…');
-      document.getElementById('complete-btn').disabled = true;
-      hideSuggestion();
-
-      google.script.run
-        .withSuccessHandler(function(ctx) {
-          setStatus('complete-status', 'Streaming…');
-          startStream(ctx);
-        })
-        .withFailureHandler(function(err) {
-          setStatus('complete-status', 'Error: ' + err.message, true);
-          document.getElementById('complete-btn').disabled = false;
-        })
-        .getCursorContext();
-    }
-
-    function startStream(ctx) {
-      if (abortCtrl) { abortCtrl.abort(); }
-      abortCtrl = new AbortController();
-      suggestion = '';
-
-      fetch(backendUrl + '/api/complete', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          prefix:   ctx.prefix,
-          suffix:   ctx.suffix,
-          language: 'google-docs',
-          query:    ctx.prefix.slice(-150).trim(),
-          index:    'drive-docs',
-        }),
-        signal: abortCtrl.signal,
-      })
-      .then(function(res) {
-        if (!res.ok) {
-          return res.text().then(function(t) {
-            throw new Error('HTTP ' + res.status + ': ' + t);
-          });
-        }
-
-        var reader  = res.body.getReader();
-        var decoder = new TextDecoder();
-        var buffer  = '';
-
-        function read() {
-          reader.read().then(function(result) {
-            if (result.done) {
-              abortCtrl = null;
-              document.getElementById('complete-btn').disabled = false;
-              if (!suggestion) { setStatus('complete-status', ''); }
-              return;
-            }
-
-            buffer += decoder.decode(result.value, { stream: true });
-            var lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (var i = 0; i < lines.length; i++) {
-              var line = lines[i];
-              if (!line.startsWith('data: ')) { continue; }
-              var data = line.slice(6).trim();
-              if (data === '[DONE]') {
-                setStatus('complete-status', 'Done — ' + suggestion.length + ' chars');
-                abortCtrl = null;
-                document.getElementById('complete-btn').disabled = false;
-                return;
-              }
-              try {
-                var evt = JSON.parse(data);
-                if (evt.token) {
-                  suggestion += evt.token;
-                  showSuggestion(suggestion);
-                }
-              } catch (e) { /* ignore malformed SSE */ }
-            }
-
-            read();
-          }).catch(function(err) {
-            if (err.name !== 'AbortError') {
-              setStatus('complete-status', 'Stream error: ' + err.message, true);
-            }
-            abortCtrl = null;
-            document.getElementById('complete-btn').disabled = false;
-          });
-        }
-
-        read();
-      })
-      .catch(function(err) {
-        if (err.name !== 'AbortError') {
-          setStatus('complete-status', 'Error: ' + err.message, true);
-        }
-        abortCtrl = null;
-        document.getElementById('complete-btn').disabled = false;
-      });
-    }
-
-    function showSuggestion(text) {
-      var box = document.getElementById('suggestion-box');
-      box.textContent = text;
-      box.style.display = 'block';
-      document.getElementById('action-row').style.display = 'flex';
-    }
-
-    function hideSuggestion() {
-      document.getElementById('suggestion-box').style.display = 'none';
-      document.getElementById('action-row').style.display = 'none';
-      suggestion = '';
-    }
-
-    function onInsert() {
-      if (!suggestion) { return; }
-      var text = suggestion;
-      hideSuggestion();
-      setStatus('complete-status', 'Inserting…');
-      google.script.run
-        .withSuccessHandler(function() { setStatus('complete-status', 'Inserted.'); })
-        .withFailureHandler(function(err) {
-          setStatus('complete-status', 'Insert failed: ' + err.message, true);
-        })
-        .insertAtCursor(text);
-    }
-
-    function onDismiss() {
-      if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
-      hideSuggestion();
-      prefixChangedAt = 0; // don't re-trigger at same position
-      setStatus('complete-status', '');
     }
 
     // ── Related docs search ────────────────────────────────────────────────────
@@ -519,32 +256,26 @@
       var url = document.getElementById('backend-url-input').value.trim();
       backendUrl = url;
       google.script.run
-        .withSuccessHandler(function() { setStatus('index-status', 'Saved.'); })
+        .withSuccessHandler(function() { document.getElementById('index-status').textContent = 'Saved.'; })
         .setBackendUrl(url);
     }
 
     function onIndexFolder() {
       document.getElementById('index-btn').disabled = true;
-      setStatus('index-status', 'Indexing…');
+      document.getElementById('index-status').textContent = 'Indexing…';
       google.script.run
         .withSuccessHandler(function(msg) {
-          setStatus('index-status', msg);
+          document.getElementById('index-status').textContent = msg;
           document.getElementById('index-btn').disabled = false;
         })
         .withFailureHandler(function(err) {
-          setStatus('index-status', 'Error: ' + err.message, true);
+          document.getElementById('index-status').textContent = 'Error: ' + err.message;
           document.getElementById('index-btn').disabled = false;
         })
         .indexFolder();
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
-
-    function setStatus(id, msg, isError) {
-      var el = document.getElementById(id);
-      el.textContent  = msg;
-      el.className    = 'status' + (isError ? ' error' : '');
-    }
 
     function esc(s) {
       return String(s)

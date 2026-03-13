@@ -163,6 +163,43 @@ body { margin: 0; min-height: 100vh; }
 
 .source-select:focus { outline: none; border-color: #4b5563; }
 
+/* ── Config bar (model + agent selectors) ────────────────────────────────── */
+
+.config-bar {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0 2px;
+}
+
+.config-bar-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(229, 233, 240, 0.65);
+}
+
+.config-bar-select {
+  width: 100%;
+  border: 1px solid #7d8691;
+  border-radius: 8px;
+  padding: 6px 28px 6px 10px;
+  font-size: 0.82rem;
+  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23374151' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 10px center;
+  background-size: 10px;
+  appearance: none;
+  cursor: pointer;
+  color: #0f172a;
+  box-shadow: 0 4px 10px rgba(20,28,39,0.1), inset 0 1px 0 rgba(255,255,255,0.7);
+  transition: border-color 160ms ease;
+}
+
+.config-bar-select:focus { outline: none; border-color: #4b5563; }
+
 /* ── Forms ───────────────────────────────────────────────────────────────── */
 
 .form-grid { display: grid; gap: 10px; margin-top: 12px; }

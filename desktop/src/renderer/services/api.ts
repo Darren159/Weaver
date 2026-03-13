@@ -36,6 +36,15 @@ export type SearchResult = {
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
 export type SearchIndex = 'drive-docs' | 'github-docs';
 
+export type AgentRecord = {
+  id: string;
+  config: {
+    name: string;
+    description?: string;
+    system_instructions: string;
+  };
+};
+
 // ── Config cache ──────────────────────────────────────────────────────────────
 
 let _backendUrl: string | null = null;
@@ -197,12 +206,13 @@ export async function streamChat(
   onToken: (token: string) => void,
   index?: SearchIndex,
   signal?: AbortSignal,
+  agentInstructions?: string,
 ): Promise<void> {
   const base = await getBase();
   const response = await fetch(`${base}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, fileContext, fileName, index }),
+    body: JSON.stringify({ messages, fileContext, fileName, index, agentInstructions }),
     signal,
   });
   if (!response.ok) throw new Error(await parseError(response));
@@ -264,5 +274,49 @@ export async function insertInGdocs(text: string): Promise<{ ok: boolean; error?
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Insert failed' };
+  }
+}
+
+// ── Model selection ───────────────────────────────────────────────────────────
+
+export const BEDROCK_MODELS: { id: string; label: string }[] = [
+  { id: 'us.anthropic.claude-sonnet-4-6',         label: 'Claude Sonnet 4.6' },
+  { id: 'us.anthropic.claude-opus-4-6',           label: 'Claude Opus 4.6' },
+  { id: 'us.anthropic.claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+  { id: 'us.anthropic.claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+  { id: 'us.anthropic.claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' },
+];
+
+export async function getActiveModel(): Promise<string> {
+  try {
+    const base = await getBase();
+    const response = await fetch(`${base}/api/model`);
+    if (!response.ok) return BEDROCK_MODELS[0].id;
+    const data = (await response.json()) as { model_id: string };
+    return data.model_id;
+  } catch {
+    return BEDROCK_MODELS[0].id;
+  }
+}
+
+export async function setActiveModel(modelId: string): Promise<void> {
+  const base = await getBase();
+  await fetch(`${base}/api/model`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model_id: modelId }),
+  });
+}
+
+// ── Agents ────────────────────────────────────────────────────────────────────
+
+export async function listAgents(): Promise<AgentRecord[]> {
+  try {
+    const base = await getBase();
+    const response = await fetch(`${base}/agents`);
+    if (!response.ok) return [];
+    return (await response.json()) as AgentRecord[];
+  } catch {
+    return [];
   }
 }
