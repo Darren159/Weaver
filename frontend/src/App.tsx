@@ -167,14 +167,17 @@ function App() {
   }, [maxFiles]);
 
   // Model state
-  const [activeModel, setActiveModelId] = useState<string>("us.anthropic.claude-3-5-sonnet-20241022-v2:0");
+  const [activeModel, setActiveModelId] = useState<string>("us.anthropic.claude-sonnet-4-6");
   const [isUpdatingModel, setIsUpdatingModel] = useState(false);
 
   const AVAILABLE_MODELS = [
-    { id: "us.anthropic.claude-3-5-sonnet-20241022-v2:0", name: "Claude 3.5 Sonnet" },
-    { id: "us.anthropic.claude-3-7-sonnet-20250219-v1:0", name: "Claude 3.7 Sonnet" },
-    { id: "amazon.nova-pro-v1:0", name: "Amazon Nova Pro" },
-    { id: "us.anthropic.claude-3-haiku-20240307-v1:0", name: "Claude 3 Haiku" },
+    { id: "us.anthropic.claude-sonnet-4-6",             name: "Claude Sonnet 4.6" },
+    { id: "us.anthropic.claude-opus-4-6-v1",            name: "Claude Opus 4.6" },
+    { id: "us.anthropic.claude-sonnet-4-20250514-v1:0", name: "Claude Sonnet 4" },
+    { id: "us.anthropic.claude-opus-4-20250514-v1:0",   name: "Claude Opus 4" },
+    { id: "us.amazon.nova-pro-v1:0",                    name: "Amazon Nova Pro" },
+    { id: "us.amazon.nova-premier-v1:0",                name: "Amazon Nova Premier" },
+    { id: "us.anthropic.claude-3-haiku-20240307-v1:0",  name: "Claude 3 Haiku" },
   ];
 
   useEffect(() => {

@@ -3,9 +3,9 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/model", tags=["model"])
 
-# Default to Claude 3.5 Sonnet
+# Default to Claude Sonnet 4.6
 class ModelState:
-    active_model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    active_model_id = "us.anthropic.claude-sonnet-4-6"
 
 class ModelUpdateRequest(BaseModel):
     model_id: str

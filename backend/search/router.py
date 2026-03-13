@@ -4,20 +4,12 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.requests import Request
 
-from backend.config import settings
-from backend.elastic import get_client, ALL_INDICES
+from backend.elastic import get_client, ALL_INDICES, DRIVE_INDEX, GITHUB_INDEX
 from backend.model_config import ModelState
 
 router = APIRouter(prefix="/api", tags=["search"])
 
-from backend.elastic import get_client, ALL_INDICES, DRIVE_INDEX, GITHUB_INDEX
-
 _ALLOWED_INDICES = {DRIVE_INDEX, GITHUB_INDEX, ALL_INDICES}
-
-router = APIRouter(prefix="/api", tags=["search"])
-
-LLM_INFERENCE_ID = ".anthropic-claude-3.7-sonnet-chat_completion"
-
 VALID_INDICES = {DRIVE_INDEX, GITHUB_INDEX}
 
 
@@ -177,33 +169,9 @@ async def complete(request: Request):
             )
 
         llm_messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a code completion assistant. Given the user's code context "
-                    "and relevant API documentation, provide ONLY the code that should "
-                    "come next. Do not include explanations, markdown, or code fences. "
-                    "Just output the raw code completion (1-5 lines max)."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Language: {language}\n\n"
-                    f"Relevant API documentation:\n{api_context}\n\n"
-                    f"Code before cursor:\n{prefix[-800:]}\n\n"
-                    f"Code after cursor:\n{suffix[:200]}\n\n"
-                    "Complete the code at the cursor position:"
-                ),
-            },
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_content},
         ]
-        url = f"{settings.es_node.rstrip('/')}/_inference/chat_completion/{LLM_INFERENCE_ID}/_stream"
-        llm_body = {
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_content},
-            ],
-        }
 
         def token_stream():
             try:
@@ -214,22 +182,22 @@ async def complete(request: Request):
                     for m in llm_messages if m["role"] in ("user", "assistant")
                 ]
 
+                print(f"[complete] Calling Bedrock model: {ModelState.active_model_id}")
                 response = client.converse_stream(
                     modelId=ModelState.active_model_id,
                     messages=bedrock_messages,
-                    system=system_texts
+                    system=system_texts,
                 )
 
-                stream = response.get("stream")
-                if stream:
-                    for event in stream:
-                        if "contentBlockDelta" in event:
-                            delta = event["contentBlockDelta"]["delta"]
-                            if "text" in delta:
-                                yield f"data: {json.dumps({'token': delta['text']})}\n\n"
+                for event in response.get("stream") or []:
+                    if "contentBlockDelta" in event:
+                        delta = event["contentBlockDelta"]["delta"]
+                        if "text" in delta:
+                            yield f"data: {json.dumps({'token': delta['text']})}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
-                print(f"[complete] Bedrock stream error: {e}")
+                print(f"[complete] Bedrock stream error: {type(e).__name__}: {e}")
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
                 yield "data: [DONE]\n\n"
 
         return StreamingResponse(token_stream(), media_type="text/event-stream")
@@ -321,23 +289,21 @@ async def chat(request: Request):
                 {"role": m["role"], "content": [{"text": m["content"]}]}
                 for m in llm_messages if m["role"] in ("user", "assistant")
             ]
-
+            print(f"[chat] Calling Bedrock model: {ModelState.active_model_id}")
             response = client.converse_stream(
                 modelId=ModelState.active_model_id,
                 messages=bedrock_messages,
-                system=system_texts
+                system=system_texts,
             )
-
-            stream = response.get("stream")
-            if stream:
-                for event in stream:
-                    if "contentBlockDelta" in event:
-                        delta = event["contentBlockDelta"]["delta"]
-                        if "text" in delta:
-                            yield f"data: {json.dumps({'token': delta['text']})}\n\n"
+            for event in response.get("stream") or []:
+                if "contentBlockDelta" in event:
+                    delta = event["contentBlockDelta"]["delta"]
+                    if "text" in delta:
+                        yield f"data: {json.dumps({'token': delta['text']})}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
-            print(f"[chat] Bedrock stream error: {e}")
+            print(f"[chat] Bedrock stream error: {type(e).__name__}: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(token_stream(), media_type="text/event-stream")
