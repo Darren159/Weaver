@@ -34,8 +34,8 @@ class DiffCodeLensProvider implements vscode.CodeLensProvider {
     const pos = new vscode.Position(this._state.line, 0);
     const r   = new vscode.Range(pos, pos);
     return [
-      new vscode.CodeLens(r, { title: '$(check) Keep', command: 'pkmLinker.keepChange', tooltip: 'Accept this change' }),
-      new vscode.CodeLens(r, { title: '$(discard) Undo', command: 'pkmLinker.undoChange', tooltip: 'Revert this change' }),
+      new vscode.CodeLens(r, { title: '$(check) Keep', command: 'weaver.keepChange', tooltip: 'Accept this change' }),
+      new vscode.CodeLens(r, { title: '$(discard) Undo', command: 'weaver.undoChange', tooltip: 'Revert this change' }),
     ];
   }
 }
@@ -67,8 +67,8 @@ export class ChatPanel {
         if (editor) { this._lastEditor = editor; }
       }),
       vscode.languages.registerCodeLensProvider({ scheme: 'file' }, this._diffLens),
-      vscode.commands.registerCommand('pkmLinker.keepChange', () => this._clearDiff(false)),
-      vscode.commands.registerCommand('pkmLinker.undoChange', () => this._clearDiff(true)),
+      vscode.commands.registerCommand('weaver.keepChange', () => this._clearDiff(false)),
+      vscode.commands.registerCommand('weaver.undoChange', () => this._clearDiff(true)),
     );
   }
 
@@ -86,8 +86,8 @@ export class ChatPanel {
     }
 
     this._panel = vscode.window.createWebviewPanel(
-      'pkmLinker.chat',
-      'PKM Chat',
+      'weaver.chat',
+      'Weaver Chat',
       { viewColumn: vscode.ViewColumn.Two, preserveFocus: false },
       {
         enableScripts: true,
@@ -127,7 +127,7 @@ export class ChatPanel {
     this._panel?.webview.postMessage({ type: 'streamStart' });
 
     const backendUrl = vscode.workspace
-      .getConfiguration('pkmLinker')
+      .getConfiguration('weaver')
       .get<string>('backendUrl', 'http://localhost:8000');
 
     // _lastEditor is maintained by onDidChangeActiveTextEditor in the constructor
@@ -288,7 +288,7 @@ export class ChatPanel {
   private async _applyCode(code: string, language: string): Promise<void> {
     const editor = this._lastEditor ?? vscode.window.activeTextEditor;
     if (!editor) {
-      vscode.window.showWarningMessage('PKM Chat: No active editor to apply changes to.');
+      vscode.window.showWarningMessage('Weaver: No active editor to apply changes to.');
       return;
     }
 
@@ -652,7 +652,7 @@ export class ChatPanel {
 
       const label = document.createElement('div');
       label.className = 'msg-label';
-      label.textContent = role === 'user' ? 'You' : 'PKM Assistant';
+      label.textContent = role === 'user' ? 'You' : 'Weaver';
 
       const body = document.createElement('div');
       body.className = 'msg-body';
