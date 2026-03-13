@@ -45,7 +45,7 @@ function onOpen(): void {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function showSidebar(): void {
-  const html = HtmlService.createHtmlOutputFromFile('src/sidebar')
+  const html = HtmlService.createHtmlOutputFromFile('sidebar')
     .setTitle('Weaver')
     .setWidth(320);
   DocumentApp.getUi().showSidebar(html);
